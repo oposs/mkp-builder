@@ -255,45 +255,12 @@ jobs:
           files: ${{ steps.build.outputs.package-file }}
 ```
 
-### Multi-Version Support
-
-```yaml
-name: Build for Multiple CheckMK Versions
-
-on:
-  push:
-    tags: ['v*']
-
-jobs:
-  build:
-    strategy:
-      matrix:
-        cmk-version: ['2.1.0p40', '2.2.0p30', '2.3.0p20']
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Build MKP for CMK ${{ matrix.cmk-version }}
-        uses: oposs/mkp-builder@v1
-        with:
-          version: ${{ github.ref_name }}
-          cmk-min-version: ${{ matrix.cmk-version }}
-          cmk-packaged-version: ${{ matrix.cmk-version }}
-          output-dir: dist/
-      
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: mkp-cmk-${{ matrix.cmk-version }}
-          path: dist/*.mkp
-```
-
 ## MKP Package Structure
 
 The action creates MKP packages with the following structure:
 
 ```
-package.mkp (gzip compressed)
+package.mkp (tar file, gzip compressed)
 ├── info                    # Python dict with package metadata
 ├── info.json              # JSON version of metadata
 ├── agents.tar             # Agent plugins and scripts
@@ -304,8 +271,6 @@ package.mkp (gzip compressed)
 ## Supported CheckMK Versions
 
 - **CheckMK 2.3.x** (default)
-- **CheckMK 2.2.x** (with appropriate configuration)
-- **CheckMK 2.1.x** (with appropriate configuration)
 
 ## File Mapping
 
