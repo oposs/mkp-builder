@@ -8,11 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
-- Add full support for `VERSION_USABLE_UNTIL` including a command line argument, a GHA input and documentation.
 
 ### Changed
 
 ### Fixed
+
+## 1.0.1 - 2025-08-06
+### New
+- Add full support for `VERSION_USABLE_UNTIL` including a command line argument, a GHA input and documentation.
 
 ## 1.0.0 - 2025-08-06
 ### New
