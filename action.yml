@@ -1,0 +1,187 @@
+name: 'Build CheckMK MKP Package'
+description: 'Build a CheckMK MKP package from local directory structure'
+author: 'OETIKER+PARTNER AG'
+
+inputs:
+  version:
+    description: 'Package version (e.g., 1.2.3)'
+    required: true
+  package-name:
+    description: 'Package name (default: auto-detect from directory structure)'
+    required: false
+  title:
+    description: 'Package title (default: from config file)'
+    required: false
+  author:
+    description: 'Author name and email (default: from config file)'
+    required: false
+  description:
+    description: 'Package description (default: from config file)'
+    required: false
+  cmk-min-version:
+    description: 'Minimum CheckMK version (default: from config file)'
+    required: false
+  cmk-packaged-version:
+    description: 'CheckMK version used for packaging (default: from config file)'
+    required: false
+  download-url:
+    description: 'Download URL (default: from config file)'
+    required: false
+  output-dir:
+    description: 'Output directory for MKP file (default: current directory)'
+    required: false
+    default: '.'
+  validate-python:
+    description: 'Validate Python files before packaging (true/false)'
+    required: false
+    default: 'true'
+  verbose:
+    description: 'Enable verbose output (true/false)'
+    required: false
+    default: 'false'
+
+outputs:
+  package-file:
+    description: 'Path to the created MKP package file'
+    value: ${{ steps.build.outputs.package-file }}
+  package-name:
+    description: 'Name of the package that was built'
+    value: ${{ steps.build.outputs.package-name }}
+  package-size:
+    description: 'Size of the created package'
+    value: ${{ steps.build.outputs.package-size }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      shell: bash
+      run: |
+        echo "::group::Validating inputs"
+        
+        # Validate version format (basic semver check)
+        if [[ ! "${{ inputs.version }}" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+          echo "::error::Invalid version format. Use semantic versioning (e.g., 1.2.3 or 1.2.3-beta.1)"
+          exit 1
+        fi
+        
+        # Validate boolean inputs
+        if [[ "${{ inputs.validate-python }}" != "true" && "${{ inputs.validate-python }}" != "false" ]]; then
+          echo "::error::validate-python must be 'true' or 'false'"
+          exit 1
+        fi
+        
+        if [[ "${{ inputs.verbose }}" != "true" && "${{ inputs.verbose }}" != "false" ]]; then
+          echo "::error::verbose must be 'true' or 'false'"
+          exit 1
+        fi
+        
+        # Validate output directory doesn't contain dangerous paths
+        if [[ "${{ inputs.output-dir }}" =~ \.\./|\.\.$|^/ ]]; then
+          echo "::error::output-dir cannot contain relative path traversal or absolute paths"
+          exit 1
+        fi
+        
+        echo "::notice::Input validation passed"
+        echo "::endgroup::"
+
+    - name: Set up Python
+      if: ${{ inputs.validate-python == 'true' }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Verify MKP build script
+      shell: bash
+      run: |
+        echo "::group::Verifying MKP build script"
+        
+        # Use the versioned mkp-builder.py script from this action
+        # This ensures version consistency between action and script
+        MKP_SCRIPT="${{ github.action_path }}/mkp-builder.py"
+        
+        if [[ ! -f "$MKP_SCRIPT" ]]; then
+          echo "::error::mkp-builder.py not found in action directory: $MKP_SCRIPT"
+          exit 1
+        fi
+        
+        # Verify the script
+        if [[ ! -s "$MKP_SCRIPT" ]]; then
+          echo "::error::Build script is empty"
+          exit 1
+        fi
+        
+        # Basic validation that it looks like a script
+        if ! head -1 "$MKP_SCRIPT" | grep -q "^#!/"; then
+          echo "::error::Build script doesn't appear to be a script"
+          exit 1
+        fi
+        
+        # Make it executable (just in case)
+        chmod +x "$MKP_SCRIPT"
+        
+        echo "::notice::Using versioned MKP build script (ensures version consistency)"
+        echo "::endgroup::"
+
+    - name: Build MKP package
+      id: build
+      shell: bash
+      run: |
+        echo "::group::Building MKP package"
+        
+        # Use the versioned script directly
+        MKP_SCRIPT="${{ github.action_path }}/mkp-builder.py"
+        
+        # Build command arguments
+        BUILD_ARGS=("--version" "${{ inputs.version }}")
+        
+        # Add optional arguments if provided
+        [[ -n "${{ inputs.package-name }}" ]] && BUILD_ARGS+=("--name" "${{ inputs.package-name }}")
+        [[ -n "${{ inputs.title }}" ]] && BUILD_ARGS+=("--title" "${{ inputs.title }}")
+        [[ -n "${{ inputs.author }}" ]] && BUILD_ARGS+=("--author" "${{ inputs.author }}")
+        [[ -n "${{ inputs.description }}" ]] && BUILD_ARGS+=("--description" "${{ inputs.description }}")
+        [[ -n "${{ inputs.cmk-min-version }}" ]] && BUILD_ARGS+=("--cmk-min" "${{ inputs.cmk-min-version }}")
+        [[ -n "${{ inputs.cmk-packaged-version }}" ]] && BUILD_ARGS+=("--cmk-packaged" "${{ inputs.cmk-packaged-version }}")
+        [[ -n "${{ inputs.download-url }}" ]] && BUILD_ARGS+=("--download-url" "${{ inputs.download-url }}")
+        [[ -n "${{ inputs.output-dir }}" ]] && BUILD_ARGS+=("--output-dir" "${{ inputs.output-dir }}")
+        
+        # Add validation flag
+        if [[ "${{ inputs.validate-python }}" == "false" ]]; then
+          BUILD_ARGS+=("--no-validate")
+        else
+          BUILD_ARGS+=("--validate")
+        fi
+        
+        # Add verbose flag
+        [[ "${{ inputs.verbose }}" == "true" ]] && BUILD_ARGS+=("--verbose")
+        
+        echo "::notice::Running MKP build with arguments: ${BUILD_ARGS[*]}"
+        
+        # Run the versioned build script directly
+        "$MKP_SCRIPT" "${BUILD_ARGS[@]}"
+        
+        # Find the generated MKP file
+        MKP_FILE=$(find "${{ inputs.output-dir }}" -name "*.mkp" -type f | head -1)
+        
+        if [[ -z "$MKP_FILE" ]]; then
+          echo "::error::No MKP file found after build"
+          exit 1
+        fi
+        
+        # Extract package name from filename
+        PACKAGE_NAME=$(basename "$MKP_FILE" .mkp | sed 's/-[0-9].*//')
+        
+        # Get package size
+        PACKAGE_SIZE=$(du -h "$MKP_FILE" | cut -f1)
+        
+        # Set outputs
+        echo "package-file=$MKP_FILE" >> $GITHUB_OUTPUT
+        echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+        echo "package-size=$PACKAGE_SIZE" >> $GITHUB_OUTPUT
+        
+        echo "::notice::MKP package built successfully: $MKP_FILE ($PACKAGE_SIZE)"
+        echo "::endgroup::"
+
+branding:
+  icon: 'package'
+  color: 'blue'

@@ -1,0 +1,36 @@
+# MKP Builder Development Guidelines
+
+## Shell Script Standards
+- Use `set -euo pipefail` for error handling
+- Quote all variables: `"$variable"`
+- Use `[[ ]]` instead of `[ ]` for tests
+- Provide clear error messages with context and suggestions
+
+## Documentation
+- Update README.md when adding new features or inputs
+- Keep usage examples working and current
+- Update CHANGELOG.md for user-facing changes
+- Ensure `.mkp-builderrc.example` stays current with new config options
+
+## Testing
+- Test with minimal plugin structures (agent plugin only)
+- Test with complete plugin structures (all CheckMK components)
+- Validate Python syntax when enabled
+- Ensure generated MKP packages install correctly in CheckMK
+- Test error conditions and edge cases
+
+## CheckMK Compatibility
+- Support CheckMK 2.3.x and newer
+- Respect CheckMK local directory structure conventions
+
+## Keep it DRY!
+- Avoid code duplication in shell functions
+- Reuse common patterns and error handling
+- Extract common functionality into functions
+
+## AI Collaboration
+- When committing changes made with AI assistance, add co-authored-by lines:
+  ```
+  Co-authored-by: Cline AI Assistant <https://cline.bot>
+  Co-authored-by: Claude <noreply@anthropic.com>
+  ```

@@ -1,0 +1,277 @@
+name: Test Action
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-action:
+    name: Test MKP Builder Action
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Create test plugin structure
+        run: |
+          # Create a minimal CheckMK plugin structure for testing
+          mkdir -p local/share/check_mk/agents/plugins
+          mkdir -p local/lib/python3/cmk_addons/plugins/test_plugin/agent_based
+          
+          # Create test agent plugin
+          cat > local/share/check_mk/agents/plugins/test_plugin << 'EOF'
+          #!/bin/bash
+          echo "<<<test_plugin>>>"
+          echo "test_data 42"
+          EOF
+          chmod +x local/share/check_mk/agents/plugins/test_plugin
+          
+          # Create test check plugin
+          cat > local/lib/python3/cmk_addons/plugins/test_plugin/agent_based/test_plugin.py << 'EOF'
+          from cmk.agent_based.v2 import *
+
+          def discover_test_plugin(section):
+              yield Service()
+
+          def check_test_plugin(section):
+              yield Result(state=State.OK, summary="Test plugin working")
+
+          register.agent_section(
+              name="test_plugin",
+              parse_function=lambda string_table: string_table,
+          )
+
+          register.check_plugin(
+              name="test_plugin",
+              service_name="Test Plugin",
+              discovery_function=discover_test_plugin,
+              check_function=check_test_plugin,
+          )
+          EOF
+          
+          # Create test config
+          cat > .mkp-builderrc << 'EOF'
+          PACKAGE_NAME="test_plugin"
+          PACKAGE_TITLE="Test Plugin"
+          PACKAGE_AUTHOR="Test Author <test@example.com>"
+          PACKAGE_DESCRIPTION="A test plugin for CI/CD"
+          CMK_MIN_VERSION="2.3.0p1"
+          CMK_PACKAGED_VERSION="2.3.0p34"
+          VALIDATE_PYTHON="yes"
+          EOF
+
+      - name: Test Action
+        id: test
+        uses: ./
+        with:
+          version: '1.0.0-test'
+          verbose: 'true'
+
+      - name: Verify Output
+        run: |
+          echo "Package file: ${{ steps.test.outputs.package-file }}"
+          echo "Package name: ${{ steps.test.outputs.package-name }}"
+          echo "Package size: ${{ steps.test.outputs.package-size }}"
+          
+          # Verify the package exists
+          if [[ ! -f "${{ steps.test.outputs.package-file }}" ]]; then
+            echo "::error::Package file not found!"
+            exit 1
+          fi
+          
+          # Verify it's a valid tar.gz file
+          if ! tar -tzf "${{ steps.test.outputs.package-file }}" >/dev/null 2>&1; then
+            echo "::error::Package is not a valid tar.gz file!"
+            exit 1
+          fi
+          
+          # Verify outputs are not empty
+          if [[ -z "${{ steps.test.outputs.package-name }}" ]]; then
+            echo "::error::Package name output is empty!"
+            exit 1
+          fi
+          
+          if [[ -z "${{ steps.test.outputs.package-size }}" ]]; then
+            echo "::error::Package size output is empty!"
+            exit 1
+          fi
+          
+          # Check package contents
+          echo "Package contents:"
+          tar -tzf "${{ steps.test.outputs.package-file }}"
+          
+          # Verify expected files are in the package
+          if ! tar -tzf "${{ steps.test.outputs.package-file }}" | grep -q "info$"; then
+            echo "::error::Package missing info file!"
+            exit 1
+          fi
+          
+          echo "::notice::Action test completed successfully!"
+
+  test-with-all-inputs:
+    name: Test with All Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Create test plugin structure
+        run: |
+          mkdir -p local/share/check_mk/agents/plugins
+          mkdir -p local/lib/python3/cmk_addons/plugins/advanced_plugin/agent_based
+          
+          cat > local/share/check_mk/agents/plugins/advanced_plugin << 'EOF'
+          #!/bin/bash
+          echo "<<<advanced_plugin>>>"
+          echo "advanced_data 123"
+          EOF
+          chmod +x local/share/check_mk/agents/plugins/advanced_plugin
+          
+          cat > local/lib/python3/cmk_addons/plugins/advanced_plugin/agent_based/advanced_plugin.py << 'EOF'
+          from cmk.agent_based.v2 import *
+
+          def discover_advanced_plugin(section):
+              yield Service()
+
+          def check_advanced_plugin(section):
+              yield Result(state=State.OK, summary="Advanced plugin working")
+
+          register.agent_section(
+              name="advanced_plugin",
+              parse_function=lambda string_table: string_table,
+          )
+
+          register.check_plugin(
+              name="advanced_plugin",
+              service_name="Advanced Plugin",
+              discovery_function=discover_advanced_plugin,
+              check_function=check_advanced_plugin,
+          )
+          EOF
+
+      - name: Test Action with All Inputs
+        id: test-full
+        uses: ./
+        with:
+          version: '2.0.0-test'
+          package-name: 'advanced_plugin'
+          title: 'Advanced Test Plugin'
+          author: 'Test Developer <dev@example.com>'
+          description: 'An advanced plugin for comprehensive testing'
+          cmk-min-version: '2.3.0p1'
+          cmk-packaged-version: '2.3.0p34'
+          download-url: 'https://github.com/test/advanced-plugin'
+          output-dir: 'dist'
+          validate-python: 'true'
+          verbose: 'true'
+
+      - name: Verify Full Test Output
+        run: |
+          echo "Testing with all inputs provided"
+          
+          # Verify package was created in correct directory
+          if [[ ! -f "${{ steps.test-full.outputs.package-file }}" ]]; then
+            echo "::error::Package not found in specified output directory!"
+            exit 1
+          fi
+          
+          # Verify package name matches input
+          if [[ "${{ steps.test-full.outputs.package-name }}" != "advanced_plugin" ]]; then
+            echo "::error::Package name doesn't match input!"
+            exit 1
+          fi
+          
+          echo "::notice::All inputs test completed successfully!"
+
+  test-validation-errors:
+    name: Test Input Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Test Invalid Version Format
+        id: test-invalid-version
+        continue-on-error: true
+        uses: ./
+        with:
+          version: 'invalid-version'
+      
+      - name: Verify Version Validation
+        run: |
+          if [[ "${{ steps.test-invalid-version.outcome }}" != "failure" ]]; then
+            echo "::error::Action should have failed with invalid version!"
+            exit 1
+          fi
+          echo "::notice::Version validation working correctly"
+      
+      - name: Test Invalid Boolean Input
+        id: test-invalid-boolean
+        continue-on-error: true
+        uses: ./
+        with:
+          version: '1.0.0'
+          validate-python: 'maybe'
+      
+      - name: Verify Boolean Validation
+        run: |
+          if [[ "${{ steps.test-invalid-boolean.outcome }}" != "failure" ]]; then
+            echo "::error::Action should have failed with invalid boolean!"
+            exit 1
+          fi
+          echo "::notice::Boolean validation working correctly"
+
+  test-no-python:
+    name: Test Without Python Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Create simple plugin structure (no Python files)
+        run: |
+          mkdir -p local/share/check_mk/agents/plugins
+          
+          # Create simple agent plugin without Python
+          cat > local/share/check_mk/agents/plugins/simple_plugin << 'EOF'
+          #!/bin/bash
+          echo "<<<simple_plugin>>>"
+          echo "simple_data 1"
+          EOF
+          chmod +x local/share/check_mk/agents/plugins/simple_plugin
+
+      - name: Test Action Without Python Validation
+        id: test-no-python
+        uses: ./
+        with:
+          version: '1.0.0-no-python'
+          validate-python: 'false'
+          verbose: 'true'
+
+      - name: Verify No-Python Test Output
+        run: |
+          echo "Testing without Python validation - should be faster"
+          
+          # Verify package was created
+          if [[ ! -f "${{ steps.test-no-python.outputs.package-file }}" ]]; then
+            echo "::error::Package not found!"
+            exit 1
+          fi
+          
+          # Verify it's a valid package
+          if ! tar -tzf "${{ steps.test-no-python.outputs.package-file }}" >/dev/null 2>&1; then
+            echo "::error::Package is not a valid tar.gz file!"
+            exit 1
+          fi
+          
+          echo "::notice::No-Python test completed successfully - Python setup was skipped!"
