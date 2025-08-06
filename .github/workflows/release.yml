@@ -199,7 +199,7 @@ jobs:
           echo "::group::Version generation"
           # Get the latest tag from git
           git fetch --tags
-          LATEST_TAG=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+          LATEST_TAG=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Latest tag: $LATEST_TAG"
 
           # Parse the latest tag to get major, minor, and patch
