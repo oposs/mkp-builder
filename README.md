@@ -105,6 +105,7 @@ jobs:
 | `cmk-min-version` | Minimum CheckMK version | ❌ | From config file |
 | `cmk-packaged-version` | CheckMK packaging version | ❌ | From config file |
 | `download-url` | Download URL | ❌ | From config file |
+| `version-usable-until` | The last CheckMK version this plugin is compatible with | ❌ | From config file |
 | `output-dir` | Output directory | ❌ | `.` |
 | `validate-python` | Validate Python files | ❌ | `true` |
 | `verbose` | Enable verbose output | ❌ | `false` |

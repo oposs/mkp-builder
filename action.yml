@@ -27,6 +27,9 @@ inputs:
   download-url:
     description: 'Download URL (default: from config file)'
     required: false
+  version-usable-until:
+    description: 'The last CheckMK version this plugin is compatible with (default: from config file)'
+    required: false
   output-dir:
     description: 'Output directory for MKP file (default: current directory)'
     required: false
@@ -143,6 +146,7 @@ runs:
         [[ -n "${{ inputs.cmk-min-version }}" ]] && BUILD_ARGS+=("--cmk-min" "${{ inputs.cmk-min-version }}")
         [[ -n "${{ inputs.cmk-packaged-version }}" ]] && BUILD_ARGS+=("--cmk-packaged" "${{ inputs.cmk-packaged-version }}")
         [[ -n "${{ inputs.download-url }}" ]] && BUILD_ARGS+=("--download-url" "${{ inputs.download-url }}")
+        [[ -n "${{ inputs.version-usable-until }}" ]] && BUILD_ARGS+=("--version-usable-until" "${{ inputs.version-usable-until }}")
         [[ -n "${{ inputs.output-dir }}" ]] && BUILD_ARGS+=("--output-dir" "${{ inputs.output-dir }}")
         
         # Add validation flag

@@ -451,6 +451,8 @@ Configuration:
                        help='CheckMK version used for packaging (default: from config)')
     parser.add_argument('--download-url',
                        help='Download URL (default: from config)')
+    parser.add_argument('--version-usable-until',
+                       help='The last CheckMK version this plugin is compatible with (default: from config)')
     parser.add_argument('--output-dir', default='.',
                        help='Output directory (default: current directory)')
     
@@ -493,6 +495,8 @@ def main() -> int:
             builder.config['cmk_packaged_version'] = getattr(args, 'cmk_packaged')
         if getattr(args, 'download_url'):
             builder.config['download_url'] = getattr(args, 'download_url')
+        if getattr(args, 'version_usable_until'):
+            builder.config['version_usable_until'] = getattr(args, 'version_usable_until')
         if args.output_dir:
             builder.config['output_dir'] = args.output_dir
         

@@ -10,6 +10,7 @@ PACKAGE_DESCRIPTION="A comprehensive CheckMK plugin that monitors awesome things
 # CheckMK Compatibility
 CMK_MIN_VERSION="2.3.0p1"
 CMK_PACKAGED_VERSION="2.3.0p34"
+VERSION_USABLE_UNTIL=""
 
 # Optional settings
 DOWNLOAD_URL="https://github.com/yourusername/your-plugin-repo"

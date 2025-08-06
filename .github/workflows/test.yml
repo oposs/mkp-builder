@@ -168,6 +168,7 @@ jobs:
           description: 'An advanced plugin for comprehensive testing'
           cmk-min-version: '2.3.0p1'
           cmk-packaged-version: '2.3.0p34'
+          version-usable-until: '2.4.0'
           download-url: 'https://github.com/test/advanced-plugin'
           output-dir: 'dist'
           validate-python: 'true'
