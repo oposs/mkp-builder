@@ -5,7 +5,7 @@
 !/*.md
 !/.gitignore
 !/.github
-!/.mkp-builderrc.example
+!/.mkp-builder.ini.example
 !/.clinerules
 *~
 *.swp

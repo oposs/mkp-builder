@@ -1,0 +1,22 @@
+# Example configuration file for CheckMK MKP Builder
+# Copy this to .mkp-builder.ini in your plugin repository and customize
+
+[package]
+# Package Information
+name = my_awesome_plugin
+title = My Awesome CheckMK Plugin
+author = Your Name <your.email@example.com>
+description = A comprehensive CheckMK plugin that monitors awesome things.
+    This description can span multiple lines for better readability.
+    Use proper indentation for continuation lines.
+
+# CheckMK Compatibility
+version.min_required = 2.3.0p1
+version.packaged = 2.3.0p34
+version.usable_until = 
+
+# Optional settings
+download_url = https://github.com/yourusername/your-plugin-repo
+
+# Build Options
+validate_python = true

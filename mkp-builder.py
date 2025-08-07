@@ -6,8 +6,10 @@ Builds MKP packages from local directory structure using Python standard library
 
 import argparse
 import ast
+import configparser
 import json
 import os
+import pprint
 import re
 import shutil
 import sys
@@ -22,8 +24,8 @@ __author__ = "OETIKER+PARTNER AG"
 
 # Default configuration
 DEFAULT_CONFIG = {
-    'cmk_min_version': '2.3.0p1',
-    'cmk_packaged_version': '2.3.0p34',
+    'version.min_required': '2.3.0p1',
+    'version.packaged': '2.3.0p34',
     'validate_python': True,
     'output_dir': '.',
     'verbose': False,
@@ -66,12 +68,12 @@ class MKPBuilder:
         self.config: Dict[str, Any] = DEFAULT_CONFIG.copy()
         
     def load_config(self, config_file: Optional[Path] = None) -> None:
-        """Load configuration from .mkp-builderrc file"""
+        """Load configuration from .mkp-builder.ini file"""
         if config_file is None:
             # Look for config file in work directory first, then script directory
             candidates = [
-                self.work_dir / '.mkp-builderrc',
-                Path(__file__).parent / '.mkp-builderrc'
+                self.work_dir / '.mkp-builder.ini',
+                Path(__file__).parent / '.mkp-builder.ini'
             ]
             config_file = next((f for f in candidates if f.exists()), None)
         
@@ -82,46 +84,36 @@ class MKPBuilder:
         self.logger.info(f"Loading configuration from {config_file}")
         
         try:
-            with open(config_file, 'r', encoding='utf-8') as f:
-                for line_num, line in enumerate(f, 1):
-                    line = line.strip()
-                    
-                    # Skip comments and empty lines
-                    if not line or line.startswith('#'):
-                        continue
-                    
-                    # Parse key=value pairs
-                    if '=' not in line:
-                        continue
-                    
-                    key, value = line.split('=', 1)
-                    key = key.strip()
-                    value = value.strip()
-                    
-                    # Remove quotes
-                    if (value.startswith('"') and value.endswith('"')) or \
-                       (value.startswith("'") and value.endswith("'")):
-                        value = value[1:-1]
-                    
-                    # Map config keys to internal keys
-                    key_map = {
-                        'PACKAGE_NAME': 'name',
-                        'PACKAGE_TITLE': 'title',
-                        'PACKAGE_AUTHOR': 'author',
-                        'PACKAGE_DESCRIPTION': 'description',
-                        'CMK_MIN_VERSION': 'cmk_min_version',
-                        'CMK_PACKAGED_VERSION': 'cmk_packaged_version',
-                        'DOWNLOAD_URL': 'download_url',
-                        'VERSION_USABLE_UNTIL': 'version_usable_until',
-                        'VALIDATE_PYTHON': 'validate_python',
-                    }
-                    
-                    if key in key_map:
-                        config_key = key_map[key]
-                        if config_key == 'validate_python':
-                            self.config[config_key] = value.lower() in ('yes', 'true', '1')
-                        else:
-                            self.config[config_key] = value
+            config_parser = configparser.ConfigParser()
+            config_parser.read(config_file, encoding='utf-8')
+            
+            # Check if 'package' section exists
+            if 'package' not in config_parser:
+                self.logger.warning("No [package] section found in config file")
+                return
+            
+            package_section = config_parser['package']
+            
+            # Map INI keys to internal keys (matching info file structure)
+            key_map = {
+                'name': 'name',
+                'title': 'title', 
+                'author': 'author',
+                'description': 'description',
+                'download_url': 'download_url',
+                'version.min_required': 'version.min_required',
+                'version.packaged': 'version.packaged',
+                'version.usable_until': 'version.usable_until',
+                'validate_python': 'validate_python',
+            }
+            
+            for ini_key, config_key in key_map.items():
+                if ini_key in package_section:
+                    value = package_section[ini_key]
+                    if config_key == 'validate_python':
+                        self.config[config_key] = package_section.getboolean(ini_key, fallback=True)
+                    else:
+                        self.config[config_key] = value
                             
         except Exception as e:
             self.logger.warning(f"Error reading config file: {e}")
@@ -233,7 +225,7 @@ class MKPBuilder:
         agents_dir = self.work_dir / 'local' / 'share' / 'check_mk' / 'agents'
         if agents_dir.exists():
             for file_path in agents_dir.rglob('*'):
-                if file_path.is_file():
+                if file_path.is_file() and '__pycache__' not in file_path.parts:
                     rel_path = file_path.relative_to(agents_dir)
                     files['agents'].append(str(rel_path))
         
@@ -244,7 +236,7 @@ class MKPBuilder:
             pkg_dir = addons_dir / package_name
             if pkg_dir.exists():
                 for file_path in pkg_dir.rglob('*'):
-                    if file_path.is_file():
+                    if file_path.is_file() and '__pycache__' not in file_path.parts:
                         rel_path = file_path.relative_to(addons_dir)
                         files['cmk_addons_plugins'].append(str(rel_path))
             
@@ -253,7 +245,7 @@ class MKPBuilder:
                 sub_path = addons_dir / subdir
                 if sub_path.exists():
                     for file_path in sub_path.rglob('*'):
-                        if file_path.is_file() and package_name in file_path.name:
+                        if file_path.is_file() and package_name in file_path.name and '__pycache__' not in file_path.parts:
                             rel_path = file_path.relative_to(addons_dir)
                             files['cmk_addons_plugins'].append(str(rel_path))
         
@@ -262,7 +254,7 @@ class MKPBuilder:
         bakery_dir = lib_dir / 'cmk' / 'base' / 'cee' / 'plugins' / 'bakery'
         if bakery_dir.exists():
             for file_path in bakery_dir.rglob('*'):
-                if file_path.is_file() and package_name in file_path.name:
+                if file_path.is_file() and package_name in file_path.name and '__pycache__' not in file_path.parts:
                     rel_path = file_path.relative_to(lib_dir)
                     files['lib'].append(str(rel_path))
         
@@ -306,35 +298,19 @@ class MKPBuilder:
             'name': self.config['name'],
             'title': self.config['title'],
             'version': self.config['version'],
-            'version.min_required': self.config['cmk_min_version'],
-            'version.packaged': self.config['cmk_packaged_version'],
-            'version.usable_until': self.config.get('version_usable_until') or None,
+            'version.min_required': self.config['version.min_required'],
+            'version.packaged': self.config['version.packaged'],
+            'version.usable_until': self.config.get('version.usable_until') or None,
         }
         
         # Write info file in Python dict format
         with open(build_dir / 'info', 'w', encoding='utf-8') as f:
-            f.write("{\n")
-            for key, value in info_data.items():
-                if value is None:
-                    f.write(f" '{key}': None,\n")
-                elif isinstance(value, str):
-                    f.write(f" '{key}': '{value}',\n")
-                elif isinstance(value, dict):
-                    # Format files dict
-                    f.write(f" '{key}': {{\n")
-                    for section, file_list in value.items():
-                        formatted_files = [f"'{file}'" for file in file_list]
-                        f.write(f"  '{section}': [{', '.join(formatted_files)}],\n")
-                    f.write(" },\n")
-                else:
-                    f.write(f" '{key}': {repr(value)},\n")
-            f.write("}\n")
+            pprint.pprint(info_data, stream=f, indent=4, width=80)
         
         # Write info.json file
         with open(build_dir / 'info.json', 'w', encoding='utf-8') as f:
             # Convert to JSON-compatible format
             json_data = info_data.copy()
-            json_data['version.usable_until'] = json_data['version.usable_until']
             json.dump(json_data, f, indent=2, ensure_ascii=False)
     
     def create_mkp_package(self, build_dir: Path) -> Path:
@@ -427,7 +403,7 @@ Examples:
   mkp-builder.py --version 1.2.3 --output-dir dist/ --verbose
 
 Configuration:
-  Default values are loaded from .mkp-builderrc file if it exists.
+  Default values are loaded from .mkp-builder.ini file if it exists.
   Command line arguments override config file values.
         """
     )
@@ -445,9 +421,9 @@ Configuration:
                        help='Author name and email (default: from config)')
     parser.add_argument('--description',
                        help='Package description (default: from config)')
-    parser.add_argument('--cmk-min',
+    parser.add_argument('--version-min-required',
                        help='Minimum CheckMK version (default: from config)')
-    parser.add_argument('--cmk-packaged',
+    parser.add_argument('--version-packaged',
                        help='CheckMK version used for packaging (default: from config)')
     parser.add_argument('--download-url',
                        help='Download URL (default: from config)')
@@ -465,6 +441,8 @@ Configuration:
     
     parser.add_argument('--verbose', action='store_true',
                        help='Verbose output')
+    parser.add_argument('--github-action-mode', action='store_true',
+                       help='Enable Github action compatible variable output')
     
     return parser
 
@@ -489,14 +467,14 @@ def main() -> int:
             builder.config['author'] = args.author
         if args.description:
             builder.config['description'] = args.description
-        if getattr(args, 'cmk_min'):
-            builder.config['cmk_min_version'] = getattr(args, 'cmk_min')
-        if getattr(args, 'cmk_packaged'):
-            builder.config['cmk_packaged_version'] = getattr(args, 'cmk_packaged')
+        if getattr(args, 'version_min_required'):
+            builder.config['version.min_required'] = getattr(args, 'version_min_required')
+        if getattr(args, 'version_packaged'):
+            builder.config['version.packaged'] = getattr(args, 'version_packaged')
         if getattr(args, 'download_url'):
             builder.config['download_url'] = getattr(args, 'download_url')
         if getattr(args, 'version_usable_until'):
-            builder.config['version_usable_until'] = getattr(args, 'version_usable_until')
+            builder.config['version.usable_until'] = getattr(args, 'version_usable_until')
         if args.output_dir:
             builder.config['output_dir'] = args.output_dir
         
@@ -513,9 +491,10 @@ def main() -> int:
         output_file = builder.build()
         
         # Output for GitHub Actions
-        print(f"::set-output name=package-file::{output_file}")
-        print(f"::set-output name=package-name::{builder.config['name']}")
-        print(f"::set-output name=package-size::{builder._format_size(output_file.stat().st_size)}")
+        if args.github_action_mode:
+            print(f"::set-output name=package-file::{output_file}")
+            print(f"::set-output name=package-name::{builder.config['name']}")
+            print(f"::set-output name=package-size::{builder._format_size(output_file.stat().st_size)}")
         
         return 0
         

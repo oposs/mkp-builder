@@ -18,10 +18,10 @@ inputs:
   description:
     description: 'Package description (default: from config file)'
     required: false
-  cmk-min-version:
+  version-min-required:
     description: 'Minimum CheckMK version (default: from config file)'
     required: false
-  cmk-packaged-version:
+  version-packaged:
     description: 'CheckMK version used for packaging (default: from config file)'
     required: false
   download-url:
@@ -143,8 +143,8 @@ runs:
         [[ -n "${{ inputs.title }}" ]] && BUILD_ARGS+=("--title" "${{ inputs.title }}")
         [[ -n "${{ inputs.author }}" ]] && BUILD_ARGS+=("--author" "${{ inputs.author }}")
         [[ -n "${{ inputs.description }}" ]] && BUILD_ARGS+=("--description" "${{ inputs.description }}")
-        [[ -n "${{ inputs.cmk-min-version }}" ]] && BUILD_ARGS+=("--cmk-min" "${{ inputs.cmk-min-version }}")
-        [[ -n "${{ inputs.cmk-packaged-version }}" ]] && BUILD_ARGS+=("--cmk-packaged" "${{ inputs.cmk-packaged-version }}")
+        [[ -n "${{ inputs.version-min-required }}" ]] && BUILD_ARGS+=("--version-min-required" "${{ inputs.version-min-required }}")
+        [[ -n "${{ inputs.version-packaged }}" ]] && BUILD_ARGS+=("--version-packaged" "${{ inputs.version-packaged }}")
         [[ -n "${{ inputs.download-url }}" ]] && BUILD_ARGS+=("--download-url" "${{ inputs.download-url }}")
         [[ -n "${{ inputs.version-usable-until }}" ]] && BUILD_ARGS+=("--version-usable-until" "${{ inputs.version-usable-until }}")
         [[ -n "${{ inputs.output-dir }}" ]] && BUILD_ARGS+=("--output-dir" "${{ inputs.output-dir }}")
@@ -162,7 +162,7 @@ runs:
         echo "::notice::Running MKP build with arguments: ${BUILD_ARGS[*]}"
         
         # Run the versioned build script directly
-        "$MKP_SCRIPT" "${BUILD_ARGS[@]}"
+        "$MKP_SCRIPT" --github-action-mode "${BUILD_ARGS[@]}"
         
         # Find the generated MKP file
         MKP_FILE=$(find "${{ inputs.output-dir }}" -name "*.mkp" -type f | head -1)

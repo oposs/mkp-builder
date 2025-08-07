@@ -81,8 +81,8 @@ jobs:
     title: 'My Awesome Plugin'
     author: 'John Doe <john@example.com>'
     description: 'A plugin that does amazing things'
-    cmk-min-version: '2.3.0p1'
-    cmk-packaged-version: '2.3.0p34'
+    version-min-required: '2.3.0p1'
+    version-packaged: '2.3.0p34'
     validate-python: 'true'
     verbose: 'true'
 
@@ -102,8 +102,8 @@ jobs:
 | `title` | Package title | ❌ | From config file |
 | `author` | Author name and email | ❌ | From config file |
 | `description` | Package description | ❌ | From config file |
-| `cmk-min-version` | Minimum CheckMK version | ❌ | From config file |
-| `cmk-packaged-version` | CheckMK packaging version | ❌ | From config file |
+| `version-min-required` | Minimum CheckMK version | ❌ | From config file |
+| `version-packaged` | CheckMK packaging version | ❌ | From config file |
 | `download-url` | Download URL | ❌ | From config file |
 | `version-usable-until` | The last CheckMK version this plugin is compatible with | ❌ | From config file |
 | `output-dir` | Output directory | ❌ | `.` |
@@ -120,22 +120,26 @@ jobs:
 
 ## Configuration File
 
-Create a `.mkp-builderrc` file in your repository root for default values:
+Create a `.mkp-builder.ini` file in your repository root for default values:
 
-```bash
+```ini
+[package]
 # Package Information
-PACKAGE_NAME="my_plugin"
-PACKAGE_TITLE="My Awesome Plugin"
-PACKAGE_AUTHOR="John Doe <john@example.com>"
-PACKAGE_DESCRIPTION="A plugin that does amazing things"
+name = my_plugin
+title = My Awesome Plugin
+author = John Doe <john@example.com>
+description = A plugin that does amazing things.
+    This description can span multiple lines
+    and provides better formatting options.
 
 # CheckMK Compatibility
-CMK_MIN_VERSION="2.3.0p1"
-CMK_PACKAGED_VERSION="2.3.0p34"
+version.min_required = 2.3.0p1
+version.packaged = 2.3.0p34
+version.usable_until = 3.0.0
 
 # Optional
-DOWNLOAD_URL="https://github.com/user/repo"
-VALIDATE_PYTHON="yes"
+download_url = https://github.com/user/repo
+validate_python = true
 ```
 
 ## Required Directory Structure
@@ -161,7 +165,7 @@ repository/
 │   │       └── your_plugin.py
 │   └── share/check_mk/agents/plugins/
 │       └── your_plugin
-├── .mkp-builderrc            # Optional config file
+├── .mkp-builder.ini          # Optional config file
 └── .github/workflows/
     └── build.yml
 ```
@@ -295,11 +299,11 @@ The action automatically maps files from your local directory structure:
 
 **"No MKP file found after build"**
 - Ensure your `local/` directory structure is correct
-- Check that your `.mkp-builderrc` file has valid syntax
+- Check that your `.mkp-builder.ini` file has valid syntax
 - Verify Python files pass validation
 
 **"Package name could not be determined"**
-- Add `package-name` input or set `PACKAGE_NAME` in `.mkp-builderrc`
+- Add `package-name` input or set `name` in the `[package]` section of `.mkp-builder.ini`
 - Ensure your agent plugin files exist in the correct location
 
 **"Python syntax error"**
