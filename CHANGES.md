@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 ### Fixed
+
+## 2.0.2 - 2025-08-07
+### Fixed
 - Fix lib.tar creation to properly handle both `check_mk/` and `python3/cmk/` directory structures with consistent MKP-compatible archive paths
 - Add conflict detection when both `local/lib/check_mk/` and `local/lib/python3/cmk/` exist as directories
 
