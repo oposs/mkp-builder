@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+
+### Changed
+
+### Fixed
+
+## 2.0.0 - 2025-08-07
+### New
 - Add support for INI configuration format with `.mkp-builder.ini` files
 - Add multiline description support in configuration files
 - Add `__pycache__` directory filtering to exclude Python cache files from packages
