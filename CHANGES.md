@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update README.md examples to use v2.0.0 and document breaking changes from v1.x
 
 ### Fixed
+- Fix deprecated GitHub Actions ::set-output command usage to use new GITHUB_OUTPUT environment file format
 
 ## 2.0.0 - 2025-08-07
 ### New

@@ -492,9 +492,18 @@ def main() -> int:
         
         # Output for GitHub Actions
         if args.github_action_mode:
-            print(f"::set-output name=package-file::{output_file}")
-            print(f"::set-output name=package-name::{builder.config['name']}")
-            print(f"::set-output name=package-size::{builder._format_size(output_file.stat().st_size)}")
+            import os
+            github_output = os.environ.get('GITHUB_OUTPUT')
+            if github_output:
+                with open(github_output, 'a') as f:
+                    f.write(f"package-file={output_file}\n")
+                    f.write(f"package-name={builder.config['name']}\n")
+                    f.write(f"package-size={builder._format_size(output_file.stat().st_size)}\n")
+            else:
+                # Fallback for local testing or non-GitHub environments
+                print(f"package-file={output_file}")
+                print(f"package-name={builder.config['name']}")
+                print(f"package-size={builder._format_size(output_file.stat().st_size)}")
         
         return 0
         
