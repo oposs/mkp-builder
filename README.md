@@ -7,6 +7,8 @@
 
 > **📚 Plugin Development Guide**: Since many users of mkp-builder are developing CheckMK plugins, we maintain comprehensive documentation for CheckMK 2.3.x plugin development in [`cmk-pluigin-guide.md`](cmk-api-doc.md). This guide covers agent plugins, check plugins, rulesets, graphing, and bakery integration with practical examples and best practices.
 
+> **🚨 Breaking Changes in v2.0.0**: If you're upgrading from v1.x, please note that v2.0.0 introduces breaking changes. The configuration file format has changed from `.mkp-builderrc` to `.mkp-builder.ini` with INI format syntax. GitHub Action input names have also been updated. See the [changelog](CHANGES.md) for full migration details.
+
 A reusable GitHub Action for building CheckMK MKP (Monitoring Konfiguration Package) files from local directory structures.
 
 ## Features
@@ -22,7 +24,7 @@ A reusable GitHub Action for building CheckMK MKP (Monitoring Konfiguration Pack
 
 ```yaml
 - name: Build MKP Package
-  uses: oposs/mkp-builder@v1
+  uses: oposs/mkp-builder@v2
   with:
     version: '1.2.3'
 ```
@@ -33,10 +35,10 @@ For production use, choose the appropriate versioning strategy:
 
 ```yaml
 # Pin to exact version (recommended for production)
-- uses: oposs/mkp-builder@v1.2.3
+- uses: oposs/mkp-builder@v2.0.0
 
 # Pin to major version (gets latest features and fixes)  
-- uses: oposs/mkp-builder@v1
+- uses: oposs/mkp-builder@v2
 
 # Use latest from main branch (not recommended for production)
 - uses: oposs/mkp-builder@main
@@ -64,7 +66,7 @@ jobs:
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
       
       - name: Build MKP
-        uses: oposs/mkp-builder@v1
+        uses: oposs/mkp-builder@v2
         with:
           version: ${{ steps.version.outputs.version }}
 ```
@@ -74,7 +76,7 @@ jobs:
 ```yaml
 - name: Build MKP Package
   id: build-mkp
-  uses: oposs/mkp-builder@v1
+  uses: oposs/mkp-builder@v2
   with:
     version: ${{ github.ref_name }}
     package-name: 'my_plugin'
@@ -193,7 +195,7 @@ jobs:
       
       - name: Build MKP
         id: build
-        uses: oposs/mkp-builder@v1
+        uses: oposs/mkp-builder@v2
         with:
           version: ${{ steps.version.outputs.version }}
           verbose: 'true'
@@ -231,7 +233,7 @@ jobs:
           fi
       
       - name: Test build
-        uses: oposs/mkp-builder@v1
+        uses: oposs/mkp-builder@v2
         with:
           version: '0.0.0-test'
           validate-python: 'true'
@@ -250,7 +252,7 @@ jobs:
       
       - name: Build MKP
         id: build
-        uses: oposs/mkp-builder@v1
+        uses: oposs/mkp-builder@v2
         with:
           version: ${{ steps.version.outputs.version }}
       
@@ -315,7 +317,7 @@ The action automatically maps files from your local directory structure:
 Enable verbose output for detailed logging:
 
 ```yaml
-- uses: oposs/mkp-builder@v1
+- uses: oposs/mkp-builder@v2
   with:
     version: '1.0.0'
     verbose: 'true'
@@ -340,10 +342,10 @@ For production use, pin to a specific version:
 
 ```yaml
 # Pin to a specific version
-- uses: oposs/mkp-builder@v1.2.3
+- uses: oposs/mkp-builder@v2.0.0
 
 # Pin to a major version (recommended)
-- uses: oposs/mkp-builder@v1
+- uses: oposs/mkp-builder@v2
 
 # Use latest (not recommended for production)
 - uses: oposs/mkp-builder@main
