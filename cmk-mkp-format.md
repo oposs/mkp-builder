@@ -117,7 +117,7 @@ project_root/
 ├── local/                # CheckMK local directory structure
 │   ├── lib/
 │   │   └── python3/
-│   │       ├── cmk/
+│   │       ├── cmk/      # note three is local/check_mk -> python3/cmk
 │   │       │   └── base/cee/plugins/bakery/
 │   │       │       └── plugin_name.py
 │   │       └── cmk_addons/plugins/
@@ -128,10 +128,14 @@ project_root/
 │   │               └── rulesets/
 │   └── share/check_mk/agents/plugins/
 │       └── plugin_name
-├── build-mkp.sh         # Build script
-├── .build-mkprc         # Package configuration
-└── MKP-INFO.md         # This documentation
+├── .mkp-builder.ini      # Package configuration
 ```
+
+Note: a common source of confusion is the path
+`check_mk/base/cee/plugins/bakery/` actually the path is
+`python3/cmk/base/cee/plugins/bakery/` since `check_mk` is actually
+a symlink to `python3/cmk`.
+
 
 ## Build Process
 

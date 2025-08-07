@@ -249,14 +249,38 @@ class MKPBuilder:
                             rel_path = file_path.relative_to(addons_dir)
                             files['cmk_addons_plugins'].append(str(rel_path))
         
-        # Collect lib files
-        lib_dir = self.work_dir / 'local' / 'lib' / 'python3'
-        bakery_dir = lib_dir / 'cmk' / 'base' / 'cee' / 'plugins' / 'bakery'
-        if bakery_dir.exists():
+        # Collect lib files - handle both check_mk and cmk directory structures
+        lib_base_dir = self.work_dir / 'local' / 'lib'
+        check_mk_dir = lib_base_dir / 'check_mk'
+        python3_cmk_dir = lib_base_dir / 'python3' / 'cmk'
+        
+        # Check for conflicting directory structures
+        if check_mk_dir.exists() and check_mk_dir.is_dir() and python3_cmk_dir.exists() and python3_cmk_dir.is_dir():
+            raise ValueError(f"Conflicting directory structures found: both '{check_mk_dir}' and '{python3_cmk_dir}' exist as directories. "
+                           "Please use either the check_mk/ structure or the python3/cmk/ structure, not both.")
+        
+        # Determine which structure to use and set up paths
+        if check_mk_dir.exists() and check_mk_dir.is_dir():
+            # Use check_mk directory structure
+            lib_source_dir = check_mk_dir
+            bakery_dir = lib_source_dir / 'base' / 'cee' / 'plugins' / 'bakery'
+            path_prefix = 'check_mk'
+        elif python3_cmk_dir.exists():
+            # Use python3/cmk structure but map to check_mk paths
+            lib_source_dir = python3_cmk_dir
+            bakery_dir = lib_source_dir / 'base' / 'cee' / 'plugins' / 'bakery'
+            path_prefix = 'check_mk'
+        else:
+            # No lib files to collect
+            bakery_dir = None
+        
+        if bakery_dir and bakery_dir.exists():
             for file_path in bakery_dir.rglob('*'):
                 if file_path.is_file() and package_name in file_path.name and '__pycache__' not in file_path.parts:
-                    rel_path = file_path.relative_to(lib_dir)
-                    files['lib'].append(str(rel_path))
+                    rel_path = file_path.relative_to(lib_source_dir)
+                    # Ensure paths always use check_mk prefix for MKP compatibility
+                    lib_path = f"{path_prefix}/{rel_path}"
+                    files['lib'].append(lib_path)
         
         return files
     
@@ -267,6 +291,32 @@ class MKPBuilder:
                 file_path = base_dir / file_rel_path
                 if file_path.exists():
                     tar.add(file_path, arcname=file_rel_path)
+    
+    def create_lib_tar(self, tar_path: Path, lib_files: List[str]) -> None:
+        """Create lib.tar with proper path handling for check_mk/cmk structures"""
+        with tarfile.open(tar_path, 'w') as tar:
+            lib_base_dir = self.work_dir / 'local' / 'lib'
+            check_mk_dir = lib_base_dir / 'check_mk'
+            python3_cmk_dir = lib_base_dir / 'python3' / 'cmk'
+            
+            # Determine source directory
+            if check_mk_dir.exists() and check_mk_dir.is_dir():
+                source_base = check_mk_dir
+                strip_prefix = 'check_mk/'
+            elif python3_cmk_dir.exists():
+                source_base = python3_cmk_dir  
+                strip_prefix = 'check_mk/'
+            else:
+                return  # No lib files
+            
+            for lib_file in lib_files:
+                if lib_file.startswith(strip_prefix):
+                    # Remove check_mk prefix to get relative path from source
+                    rel_path = lib_file[len(strip_prefix):]
+                    source_file = source_base / rel_path
+                    if source_file.exists():
+                        # Add to tar with check_mk prefix for MKP compatibility
+                        tar.add(source_file, arcname=lib_file)
     
     def create_package_tars(self, build_dir: Path, files: Dict[str, List[str]]) -> None:
         """Create the tar files for each MKP section"""
@@ -282,8 +332,7 @@ class MKPBuilder:
         
         # Create lib.tar
         self.logger.info("Creating lib.tar...")
-        lib_base = self.work_dir / 'local' / 'lib' / 'python3'
-        self.create_tar_file(lib_base, build_dir / 'lib.tar', files['lib'])
+        self.create_lib_tar(build_dir / 'lib.tar', files['lib'])
     
     def generate_metadata(self, build_dir: Path, files: Dict[str, List[str]]) -> None:
         """Generate metadata files (info and info.json)"""
