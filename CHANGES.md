@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New
 
 ### Changed
+
+### Fixed
+
+## 2.0.1 - 2025-08-07
+### Changed
 - Update README.md examples to use v2.0.0 and document breaking changes from v1.x
 
 ### Fixed
