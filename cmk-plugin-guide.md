@@ -774,6 +774,10 @@ check_plugin_my_service_multi = CheckPlugin(
 ```
 
 #### Using check_levels Helper
+
+The `check_levels` function is the recommended way to handle threshold checking in CheckMK 2.3+. It automatically handles SimpleLevels from rulesets, generates proper Result and Metric objects, and supports custom formatting.
+
+##### Basic Usage
 ```python
 from cmk.agent_based.v2 import check_levels
 
@@ -788,6 +792,251 @@ def check_my_service_levels(item: str, params: Mapping[str, Any], section: Dict[
         label="My metric",
         render_func=render.percent,
     )
+```
+
+##### Complete check_levels Parameters
+
+According to the CheckMK 2.3 documentation, `check_levels` supports these parameters:
+
+```python
+check_levels(
+    value,                    # float: The currently measured value
+    *,
+    levels_upper=None,        # Upper level parameters from SimpleLevels
+    levels_lower=None,        # Lower level parameters from SimpleLevels  
+    metric_name=None,         # str: Name for performance data metric
+    render_func=None,         # Callable: Function to format values
+    label=None,              # str: Label to prepend to output
+    boundaries=None,         # tuple: (min, max) for metric boundaries
+    notice_only=False        # bool: Only show in details if not OK
+)
+```
+
+##### SimpleLevels Format Handling
+
+CheckMK 2.3 rulesets generate SimpleLevels in dictionary format. The `check_levels` function expects levels in `("fixed", (warn, crit))` format. This applies to both `levels_upper` and `levels_lower`:
+
+```python
+def check_with_simple_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    value = section.get("storage_usage_percent", 0)
+    
+    # Handle SimpleLevels format from rulesets - UPPER levels
+    storage_levels = params.get('storage_levels')
+    if storage_levels and isinstance(storage_levels, dict) and 'levels_upper' in storage_levels:
+        levels_upper = ("fixed", storage_levels['levels_upper'])
+    else:
+        levels_upper = None
+    
+    yield from check_levels(
+        value,
+        levels_upper=levels_upper,
+        metric_name="storage_used_percent",
+        label="Storage utilization",
+        boundaries=(0.0, 100.0),
+        render_func=render.percent,
+    )
+
+def check_with_lower_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    temperature = section.get("temperature_celsius", 0)
+    
+    # Handle SimpleLevels format for LOWER levels (same pattern)
+    temp_upper_levels = params.get('temperature_levels_upper') 
+    temp_lower_levels = params.get('temperature_levels_lower')
+    
+    # Convert both upper and lower levels using identical pattern
+    levels_upper = None
+    if temp_upper_levels and isinstance(temp_upper_levels, dict) and 'levels_upper' in temp_upper_levels:
+        levels_upper = ("fixed", temp_upper_levels['levels_upper'])
+    
+    levels_lower = None  
+    if temp_lower_levels and isinstance(temp_lower_levels, dict) and 'levels_lower' in temp_lower_levels:
+        levels_lower = ("fixed", temp_lower_levels['levels_lower'])
+    
+    yield from check_levels(
+        temperature,
+        levels_upper=levels_upper,  # High temperature warnings
+        levels_lower=levels_lower,  # Low temperature warnings  
+        metric_name="temperature",
+        label="Temperature",
+        render_func=lambda v: f"{v:.1f}°C",
+    )
+```
+
+**Key Point**: The SimpleLevels conversion pattern is identical for both upper and lower levels:
+- Upper: `{"levels_upper": (warn, crit)}` → `("fixed", (warn, crit))`
+- Lower: `{"levels_lower": (warn, crit)}` → `("fixed", (warn, crit))`
+
+##### Custom Render Functions
+
+Use built-in render functions or create custom ones for proper value formatting:
+
+```python
+from cmk.agent_based.v2 import render
+
+# Built-in render functions
+def check_with_builtin_renders(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    # Percentage values
+    yield from check_levels(
+        section.get("cpu_usage", 0),
+        levels_upper=("fixed", (80.0, 90.0)),
+        metric_name="cpu_usage", 
+        render_func=render.percent,
+        label="CPU usage"
+    )
+    
+    # Byte values  
+    yield from check_levels(
+        section.get("memory_bytes", 0),
+        levels_upper=("fixed", (1024*1024*1024, 2*1024*1024*1024)),
+        metric_name="memory_usage",
+        render_func=render.bytes,
+        label="Memory usage"
+    )
+
+# Custom render functions
+def _render_operations_per_second(value: float) -> str:
+    """Custom render function for operations per second."""
+    return f"{value:.1f}/s"
+
+def _render_milliseconds(value: float) -> str:
+    """Custom render function for milliseconds."""
+    return f"{value:.2f}ms"
+
+def check_with_custom_renders(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    # I/O operations
+    yield from check_levels(
+        section.get("read_ops", 0),
+        levels_upper=("fixed", (1000, 2000)),
+        metric_name="read_ops",
+        render_func=_render_operations_per_second,
+        label="Read operations"
+    )
+    
+    # Wait times
+    yield from check_levels(
+        section.get("response_time", 0),
+        levels_upper=("fixed", (50.0, 100.0)),
+        metric_name="response_time", 
+        render_func=_render_milliseconds,
+        label="Response time"
+    )
+```
+
+##### Default Parameters with SimpleLevels Format
+
+When defining default parameters, use SimpleLevels dictionary format for CheckMK 2.3 compatibility:
+
+```python
+check_plugin_my_service = CheckPlugin(
+    name="my_service",
+    service_name="My Service",
+    sections=["my_service"],
+    discovery_function=discover_my_service,
+    check_function=check_my_service,
+    check_ruleset_name="my_service",
+    check_default_parameters={
+        # SimpleLevels format for CheckMK 2.3 - Upper levels
+        'storage_levels': {'levels_upper': (80.0, 90.0)},
+        'cpu_levels': {'levels_upper': (80.0, 90.0)},
+        
+        # SimpleLevels format for lower levels (same pattern)
+        'temperature_levels_upper': {'levels_upper': (80.0, 90.0)},  # High temp
+        'temperature_levels_lower': {'levels_lower': (10.0, 5.0)},   # Low temp
+        
+        # Other parameters can remain None
+        'memory_levels': None,
+        'response_time_levels': None,
+    },
+)
+```
+
+##### Manual vs check_levels Comparison
+
+**❌ Manual threshold checking (deprecated approach):**
+```python
+def check_manual_thresholds(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    value = section.get("metric_value", 0)
+    
+    # Manual threshold checking - NOT recommended
+    levels = params.get('levels')
+    if levels and isinstance(levels, dict) and 'levels_upper' in levels:
+        warn, crit = levels['levels_upper']
+        if value >= crit:
+            yield Result(state=State.CRIT, summary=f"Critical: {value} (>= {crit})")
+        elif value >= warn:
+            yield Result(state=State.WARN, summary=f"Warning: {value} (>= {warn})")
+        else:
+            yield Result(state=State.OK, summary=f"OK: {value}")
+    
+    # Manual metric creation
+    yield Metric("my_metric", value, levels=(warn, crit) if levels else None)
+```
+
+**✅ Using check_levels (recommended approach):**
+```python
+def check_with_check_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    value = section.get("metric_value", 0)
+    
+    # Recommended: Use check_levels for everything
+    levels = params.get('levels')
+    if levels and isinstance(levels, dict) and 'levels_upper' in levels:
+        levels_upper = ("fixed", levels['levels_upper'])
+    else:
+        levels_upper = None
+    
+    yield from check_levels(
+        value,
+        levels_upper=levels_upper,
+        metric_name="my_metric",
+        label="My metric",
+        render_func=lambda v: f"{v:.1f}",  # Custom formatting
+    )
+```
+
+##### Benefits of check_levels
+
+- **Automatic state determination**: Handles WARN/CRIT state logic
+- **Consistent formatting**: Proper threshold display in output
+- **Metric generation**: Creates performance data automatically  
+- **SimpleLevels compatibility**: Works with CheckMK 2.3 rulesets
+- **Error handling**: Robust handling of invalid parameters
+- **Extensibility**: Supports predictive levels and other advanced features
+
+##### Common Patterns
+
+**Multiple metrics with different render functions:**
+```python
+def check_comprehensive_metrics(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    # Storage percentage
+    if 'storage_levels' in params:
+        yield from check_levels(
+            section.get("storage_percent", 0),
+            levels_upper=("fixed", params['storage_levels'].get('levels_upper')) if params.get('storage_levels') else None,
+            metric_name="storage_percent",
+            render_func=render.percent,
+            label="Storage usage",
+            boundaries=(0.0, 100.0)
+        )
+    
+    # Network throughput  
+    if 'network_levels' in params:
+        yield from check_levels(
+            section.get("network_bytes", 0),
+            levels_upper=("fixed", params['network_levels'].get('levels_upper')) if params.get('network_levels') else None,
+            metric_name="network_throughput",
+            render_func=render.bytes,
+            label="Network throughput"
+        )
+    
+    # Response time
+    if 'latency_levels' in params:
+        yield from check_levels(
+            section.get("latency_ms", 0),
+            levels_upper=("fixed", params['latency_levels'].get('levels_upper')) if params.get('latency_levels') else None,
+            metric_name="latency",
+            render_func=_render_milliseconds,
+            label="Response latency"
+        )
 ```
 
 ## Agent Bakery Integration
