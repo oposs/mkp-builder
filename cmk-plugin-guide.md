@@ -814,22 +814,23 @@ check_levels(
 
 ##### SimpleLevels Format Handling
 
-CheckMK 2.3 rulesets generate SimpleLevels in dictionary format. The `check_levels` function expects levels in `("fixed", (warn, crit))` format. This applies to both `levels_upper` and `levels_lower`:
+CheckMK 2.3 rulesets with SimpleLevels actually produce parameters directly in the `("fixed", (warn, crit))` format that `check_levels()` expects, NOT as a dictionary with 'levels_upper' key. This is a common source of confusion that can lead to TypeErrors.
 
 ```python
 def check_with_simple_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     value = section.get("storage_usage_percent", 0)
     
-    # Handle SimpleLevels format from rulesets - UPPER levels
-    storage_levels = params.get('storage_levels')
-    if storage_levels and isinstance(storage_levels, dict) and 'levels_upper' in storage_levels:
-        levels_upper = ("fixed", storage_levels['levels_upper'])
-    else:
-        levels_upper = None
+    # SimpleLevels from rulesets come DIRECTLY as ("fixed", (warn, crit)) 
+    # NOT wrapped in a dict! This is the actual format:
+    # params = {
+    #     'storage_levels': ('fixed', (80.0, 90.0)),  # Already in check_levels format!
+    #     'other_param': None,
+    # }
     
+    # So just pass it directly to check_levels:
     yield from check_levels(
         value,
-        levels_upper=levels_upper,
+        levels_upper=params.get('storage_levels'),  # Pass directly, no extraction needed!
         metric_name="storage_used_percent",
         label="Storage utilization",
         boundaries=(0.0, 100.0),
@@ -839,32 +840,34 @@ def check_with_simple_levels(item: str, params: Mapping[str, Any], section: Dict
 def check_with_lower_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     temperature = section.get("temperature_celsius", 0)
     
-    # Handle SimpleLevels format for LOWER levels (same pattern)
-    temp_upper_levels = params.get('temperature_levels_upper') 
-    temp_lower_levels = params.get('temperature_levels_lower')
-    
-    # Convert both upper and lower levels using identical pattern
-    levels_upper = None
-    if temp_upper_levels and isinstance(temp_upper_levels, dict) and 'levels_upper' in temp_upper_levels:
-        levels_upper = ("fixed", temp_upper_levels['levels_upper'])
-    
-    levels_lower = None  
-    if temp_lower_levels and isinstance(temp_lower_levels, dict) and 'levels_lower' in temp_lower_levels:
-        levels_lower = ("fixed", temp_lower_levels['levels_lower'])
+    # SimpleLevels parameters come directly in the correct format!
+    # No conversion needed - just pass them to check_levels
     
     yield from check_levels(
         temperature,
-        levels_upper=levels_upper,  # High temperature warnings
-        levels_lower=levels_lower,  # Low temperature warnings  
+        levels_upper=params.get('temperature_levels_upper'),  # Already ("fixed", (warn, crit))
+        levels_lower=params.get('temperature_levels_lower'),  # Already ("fixed", (warn, crit))
         metric_name="temperature",
         label="Temperature",
         render_func=lambda v: f"{v:.1f}°C",
     )
 ```
 
-**Key Point**: The SimpleLevels conversion pattern is identical for both upper and lower levels:
-- Upper: `{"levels_upper": (warn, crit)}` → `("fixed", (warn, crit))`
-- Lower: `{"levels_lower": (warn, crit)}` → `("fixed", (warn, crit))`
+**⚠️ Common Pitfall - TypeError with SimpleLevels**
+
+A frequent mistake is trying to extract levels from a dictionary structure that doesn't exist:
+
+```python
+# ❌ WRONG - This causes TypeError: '>=' not supported between instances of 'float' and 'tuple'
+storage_levels = params.get('storage_levels')
+if storage_levels and isinstance(storage_levels, dict) and 'levels_upper' in storage_levels:
+    levels_upper = ("fixed", storage_levels['levels_upper'])  # storage_levels is already a tuple!
+
+# ✅ CORRECT - SimpleLevels already produces the right format
+levels_upper = params.get('storage_levels')  # Just use it directly!
+```
+
+The TypeError occurs because the code tries to wrap `("fixed", (80.0, 90.0))` again, resulting in `("fixed", ("fixed", (80.0, 90.0)))`, which causes check_levels to fail when comparing the float value with the nested tuple.
 
 ##### Custom Render Functions
 
@@ -924,7 +927,7 @@ def check_with_custom_renders(item: str, params: Mapping[str, Any], section: Dic
 
 ##### Default Parameters with SimpleLevels Format
 
-When defining default parameters, use SimpleLevels dictionary format for CheckMK 2.3 compatibility:
+When defining default parameters, SimpleLevels from rulesets will produce the `("fixed", (warn, crit))` format directly:
 
 ```python
 check_plugin_my_service = CheckPlugin(
@@ -935,20 +938,22 @@ check_plugin_my_service = CheckPlugin(
     check_function=check_my_service,
     check_ruleset_name="my_service",
     check_default_parameters={
-        # SimpleLevels format for CheckMK 2.3 - Upper levels
-        'storage_levels': {'levels_upper': (80.0, 90.0)},
-        'cpu_levels': {'levels_upper': (80.0, 90.0)},
+        # SimpleLevels produces this format directly when configured in GUI
+        'storage_levels': ('fixed', (80.0, 90.0)),  # Direct tuple format
+        'cpu_levels': ('fixed', (80.0, 90.0)),
         
-        # SimpleLevels format for lower levels (same pattern)
-        'temperature_levels_upper': {'levels_upper': (80.0, 90.0)},  # High temp
-        'temperature_levels_lower': {'levels_lower': (10.0, 5.0)},   # Low temp
+        # Same for lower levels
+        'temperature_levels_upper': ('fixed', (80.0, 90.0)),  # High temp warnings
+        'temperature_levels_lower': ('fixed', (10.0, 5.0)),   # Low temp warnings
         
-        # Other parameters can remain None
+        # Or use None when no default levels
         'memory_levels': None,
         'response_time_levels': None,
     },
 )
 ```
+
+**Note**: When SimpleLevels in the ruleset has no levels configured, it produces `None`, not `("no_levels", None)`. The check_levels function handles `None` appropriately.
 
 ##### Manual vs check_levels Comparison
 
@@ -977,16 +982,11 @@ def check_manual_thresholds(item: str, params: Mapping[str, Any], section: Dict[
 def check_with_check_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     value = section.get("metric_value", 0)
     
-    # Recommended: Use check_levels for everything
-    levels = params.get('levels')
-    if levels and isinstance(levels, dict) and 'levels_upper' in levels:
-        levels_upper = ("fixed", levels['levels_upper'])
-    else:
-        levels_upper = None
-    
+    # Recommended: SimpleLevels already provides the correct format
+    # Just pass the parameter directly to check_levels
     yield from check_levels(
         value,
-        levels_upper=levels_upper,
+        levels_upper=params.get('levels'),  # Already in ("fixed", (warn, crit)) format
         metric_name="my_metric",
         label="My metric",
         render_func=lambda v: f"{v:.1f}",  # Custom formatting
@@ -1008,35 +1008,32 @@ def check_with_check_levels(item: str, params: Mapping[str, Any], section: Dict[
 ```python
 def check_comprehensive_metrics(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     # Storage percentage
-    if 'storage_levels' in params:
-        yield from check_levels(
-            section.get("storage_percent", 0),
-            levels_upper=("fixed", params['storage_levels'].get('levels_upper')) if params.get('storage_levels') else None,
-            metric_name="storage_percent",
-            render_func=render.percent,
-            label="Storage usage",
-            boundaries=(0.0, 100.0)
-        )
+    yield from check_levels(
+        section.get("storage_percent", 0),
+        levels_upper=params.get('storage_levels'),  # SimpleLevels format directly
+        metric_name="storage_percent",
+        render_func=render.percent,
+        label="Storage usage",
+        boundaries=(0.0, 100.0)
+    )
     
     # Network throughput  
-    if 'network_levels' in params:
-        yield from check_levels(
-            section.get("network_bytes", 0),
-            levels_upper=("fixed", params['network_levels'].get('levels_upper')) if params.get('network_levels') else None,
-            metric_name="network_throughput",
-            render_func=render.bytes,
-            label="Network throughput"
-        )
+    yield from check_levels(
+        section.get("network_bytes", 0),
+        levels_upper=params.get('network_levels'),  # SimpleLevels format directly
+        metric_name="network_throughput",
+        render_func=render.bytes,
+        label="Network throughput"
+    )
     
     # Response time
-    if 'latency_levels' in params:
-        yield from check_levels(
-            section.get("latency_ms", 0),
-            levels_upper=("fixed", params['latency_levels'].get('levels_upper')) if params.get('latency_levels') else None,
-            metric_name="latency",
-            render_func=_render_milliseconds,
-            label="Response latency"
-        )
+    yield from check_levels(
+        section.get("latency_ms", 0),
+        levels_upper=params.get('latency_levels'),  # SimpleLevels format directly
+        metric_name="latency",
+        render_func=_render_milliseconds,
+        label="Response latency"
+    )
 ```
 
 ## Agent Bakery Integration
