@@ -5,7 +5,7 @@
 
 > **⚠️ Disclaimer**: This is an independent, community-developed tool and is **not officially affiliated with or endorsed by CheckMK GmbH**. This project was developed by reverse-engineering existing MKP package formats and studying CheckMK documentation. Any issues, bugs, or incompatibilities are our responsibility and should be reported to this project's issue tracker, not to CheckMK support.
 
-> **📚 Plugin Development Guide**: Since many users of mkp-builder are developing CheckMK plugins, we maintain comprehensive documentation for CheckMK 2.3.x plugin development in [`cmk-pluigin-guide.md`](cmk-api-doc.md). This guide covers agent plugins, check plugins, rulesets, graphing, and bakery integration with practical examples and best practices.
+> **📚 Plugin Development Guide**: Since many users of mkp-builder are developing CheckMK plugins, we maintain comprehensive documentation for CheckMK 2.3.x plugin development in [`cmk-pluigin-guide.md`](cmk-plugin-guide.md). This guide covers agent plugins, check plugins, rulesets, graphing, and bakery integration with practical examples and best practices.
 
 > **🚨 Breaking Changes in v2.0.0**: If you're upgrading from v1.x, please note that v2.0.0 introduces breaking changes. The configuration file format has changed from `.mkp-builderrc` to `.mkp-builder.ini` with INI format syntax. GitHub Action input names have also been updated. See the [changelog](CHANGES.md) for full migration details.
 
