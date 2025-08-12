@@ -5,6 +5,23 @@
 
 This guide provides comprehensive instructions for developing agent-based check plugins for CheckMK 2.3.0, including Agent Bakery support, based on the official CheckMK Plugin APIs.
 
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Prerequisites](#prerequisites)
+3. [Development Environment Setup](#development-environment-setup)
+4. [Agent Plugin Development](#agent-plugin-development)
+5. [Check Plugin Development](#check-plugin-development)
+6. [Agent Bakery Integration](#agent-bakery-integration)
+7. [Ruleset Integration](#ruleset-integration)
+8. [Graphing Integration](#graphing-integration)
+9. [Best Practices](#best-practices)
+10. [Testing and Debugging](#testing)
+11. [Deployment](#deployment)
+12. [Advanced Topics](#advanced-topics)
+13. [Complete Examples](#complete-example-temperature-monitoring-plugin)
+14. [Troubleshooting](#debugging)
+
 ## Overview
 
 CheckMK agent-based check plugins consist of two main components:
@@ -28,12 +45,14 @@ CheckMK agent-based check plugins consist of two main components:
 ├── rulesets/             # Rule specifications (using cmk.rulesets.v1)
 └── server_side_calls/    # Special agents (using cmk.server_side_calls.v1)
 
-~/local/lib/python3/cmk/base/cee/plugins/bakery/
-└──                       # Agent bakery plugins (using cmk.base.pyugins.bakery.bakery_api.v1)
+~/local/lib/check_mk/base/cee/plugins/bakery/
+└──                       # Agent bakery plugins (using cmk.base.plugins.bakery.bakery_api.v1)
 
 ~/local/share/check_mk/agents/plugins/
 └──                       # Agent plugin source files
 ```
+
+> **📝 Important Path Note**: In CheckMK, `~/local/lib/check_mk` is a symlink to `~/local/lib/python3/cmk`. You may encounter both paths in documentation, error messages, and examples - they refer to the same location. This can cause confusion when debugging path-related issues or following different documentation sources.
 
 ### Agent Plugin Location
 ```
@@ -814,60 +833,60 @@ check_levels(
 
 ##### SimpleLevels Format Handling
 
-CheckMK 2.3 rulesets with SimpleLevels actually produce parameters directly in the `("fixed", (warn, crit))` format that `check_levels()` expects, NOT as a dictionary with 'levels_upper' key. This is a common source of confusion that can lead to TypeErrors.
+CheckMK 2.3 rulesets with SimpleLevels produce parameters in a specific format that's ready for `check_levels()`:
+
+**Key Points:**
+- SimpleLevels configured in the GUI produces `("fixed", (warn, crit))` tuples directly
+- When no levels are configured, SimpleLevels produces `None`
+- The parameters are ready to use - no extraction or conversion needed
+- Never wrap the values in additional tuples or try to extract from non-existent dicts
 
 ```python
 def check_with_simple_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     value = section.get("storage_usage_percent", 0)
     
-    # SimpleLevels from rulesets come DIRECTLY as ("fixed", (warn, crit)) 
-    # NOT wrapped in a dict! This is the actual format:
-    # params = {
-    #     'storage_levels': ('fixed', (80.0, 90.0)),  # Already in check_levels format!
-    #     'other_param': None,
-    # }
+    # SimpleLevels from rulesets come as either:
+    # - ('fixed', (80.0, 90.0)) when levels are configured
+    # - None when no levels are set
     
-    # So just pass it directly to check_levels:
+    # Just pass directly to check_levels - it handles both formats:
     yield from check_levels(
         value,
-        levels_upper=params.get('storage_levels'),  # Pass directly, no extraction needed!
+        levels_upper=params.get('storage_levels'),  # Pass directly!
         metric_name="storage_used_percent",
         label="Storage utilization",
         boundaries=(0.0, 100.0),
         render_func=render.percent,
     )
 
-def check_with_lower_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+def check_with_both_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     temperature = section.get("temperature_celsius", 0)
     
-    # SimpleLevels parameters come directly in the correct format!
-    # No conversion needed - just pass them to check_levels
-    
+    # Both upper and lower levels work the same way:
     yield from check_levels(
         temperature,
-        levels_upper=params.get('temperature_levels_upper'),  # Already ("fixed", (warn, crit))
-        levels_lower=params.get('temperature_levels_lower'),  # Already ("fixed", (warn, crit))
+        levels_upper=params.get('temperature_levels_upper'),  # Direct pass
+        levels_lower=params.get('temperature_levels_lower'),  # Direct pass
         metric_name="temperature",
         label="Temperature",
         render_func=lambda v: f"{v:.1f}°C",
     )
 ```
 
-**⚠️ Common Pitfall - TypeError with SimpleLevels**
-
-A frequent mistake is trying to extract levels from a dictionary structure that doesn't exist:
+**⚠️ Common Mistake to Avoid**
 
 ```python
-# ❌ WRONG - This causes TypeError: '>=' not supported between instances of 'float' and 'tuple'
+# ❌ WRONG - Don't try to extract from non-existent dict structure
 storage_levels = params.get('storage_levels')
-if storage_levels and isinstance(storage_levels, dict) and 'levels_upper' in storage_levels:
-    levels_upper = ("fixed", storage_levels['levels_upper'])  # storage_levels is already a tuple!
+if storage_levels and isinstance(storage_levels, dict):  # This check will fail!
+    levels = storage_levels.get('levels_upper')  # storage_levels is a tuple, not a dict!
 
-# ✅ CORRECT - SimpleLevels already produces the right format
-levels_upper = params.get('storage_levels')  # Just use it directly!
+# ✅ CORRECT - Use the parameter directly
+levels = params.get('storage_levels')  # Already in correct format!
 ```
 
-The TypeError occurs because the code tries to wrap `("fixed", (80.0, 90.0))` again, resulting in `("fixed", ("fixed", (80.0, 90.0)))`, which causes check_levels to fail when comparing the float value with the nested tuple.
+**Why This Error Happens:** 
+The confusion often comes from older CheckMK versions or manual parameter handling patterns. In CheckMK 2.3 with SimpleLevels, the framework handles the complexity for you.
 
 ##### Custom Render Functions
 
@@ -955,52 +974,29 @@ check_plugin_my_service = CheckPlugin(
 
 **Note**: When SimpleLevels in the ruleset has no levels configured, it produces `None`, not `("no_levels", None)`. The check_levels function handles `None` appropriately.
 
-##### Manual vs check_levels Comparison
+##### Best Practice: Always Use check_levels
 
-**❌ Manual threshold checking (deprecated approach):**
-```python
-def check_manual_thresholds(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
-    value = section.get("metric_value", 0)
-    
-    # Manual threshold checking - NOT recommended
-    levels = params.get('levels')
-    if levels and isinstance(levels, dict) and 'levels_upper' in levels:
-        warn, crit = levels['levels_upper']
-        if value >= crit:
-            yield Result(state=State.CRIT, summary=f"Critical: {value} (>= {crit})")
-        elif value >= warn:
-            yield Result(state=State.WARN, summary=f"Warning: {value} (>= {warn})")
-        else:
-            yield Result(state=State.OK, summary=f"OK: {value}")
-    
-    # Manual metric creation
-    yield Metric("my_metric", value, levels=(warn, crit) if levels else None)
-```
-
-**✅ Using check_levels (recommended approach):**
 ```python
 def check_with_check_levels(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     value = section.get("metric_value", 0)
     
-    # Recommended: SimpleLevels already provides the correct format
-    # Just pass the parameter directly to check_levels
+    # Always use check_levels for threshold checking:
     yield from check_levels(
         value,
-        levels_upper=params.get('levels'),  # Already in ("fixed", (warn, crit)) format
+        levels_upper=params.get('levels'),  # SimpleLevels format: ("fixed", (warn, crit)) or None
         metric_name="my_metric",
         label="My metric",
-        render_func=lambda v: f"{v:.1f}",  # Custom formatting
+        render_func=lambda v: f"{v:.1f}",
     )
 ```
 
-##### Benefits of check_levels
+**Why use check_levels:**
+- Automatic state determination (OK/WARN/CRIT)
+- Consistent output formatting
+- Automatic metric generation with proper boundaries
+- Handles None levels gracefully
+- Supports predictive levels and other advanced features
 
-- **Automatic state determination**: Handles WARN/CRIT state logic
-- **Consistent formatting**: Proper threshold display in output
-- **Metric generation**: Creates performance data automatically  
-- **SimpleLevels compatibility**: Works with CheckMK 2.3 rulesets
-- **Error handling**: Robust handling of invalid parameters
-- **Extensibility**: Supports predictive levels and other advanced features
 
 ##### Common Patterns
 
@@ -1038,7 +1034,7 @@ def check_comprehensive_metrics(item: str, params: Mapping[str, Any], section: D
 
 ## Agent Bakery Integration
 
-The Agent Bakery allows centralized configuration and deployment of agent plugins across multiple hosts using the `cmk.base.pyugins.bakery.bakery_api.v1` API.
+The Agent Bakery allows centralized configuration and deployment of agent plugins across multiple hosts using the `cmk.base.plugins.bakery.bakery_api.v1` API.
 
 **Important**: CheckMK 2.3 bakery integration requires **two separate files**:
 1. **Bakery Plugin** - Technical logic for plugin generation and deployment
@@ -1049,7 +1045,7 @@ The Agent Bakery allows centralized configuration and deployment of agent plugin
 # File: ~/local/lib/check_mk/base/cee/plugins/bakery/my_service.py
 
 import json
-from cmk.base.pyugins.bakery.bakery_api.v1 import (
+from cmk.base.plugins.bakery.bakery_api.v1 import (
     register,
     Plugin,
     PluginConfig,
@@ -1178,7 +1174,7 @@ rule_spec_my_service_bakery = AgentConfig(
 ```python
 # File: ~/local/lib/check_mk/base/cee/plugins/bakery/my_service_advanced.py
 
-from cmk.base.pyugins.bakery.bakery_api.v1 import (
+from cmk.base.plugins.bakery.bakery_api.v1 import (
     register,
     Plugin,
     PluginConfig,
@@ -1485,7 +1481,7 @@ def _advanced_form_spec():
                             required=True,
                         ),
                         "read_timeout": DictElement(
-                                parameter_form=TimeSpan(
+                            parameter_form=TimeSpan(
                                 title=Title("Read timeout"),
                                 prefill=DefaultValue(60.0),
                             ),
@@ -1980,7 +1976,7 @@ python3 -m py_compile ~/local/lib/python3/cmk_addons/plugins/agent_based/my_serv
 import logging
 
 # Set up logging
-logger = logging.getLogger("cmk.base.pyugins.agent_based.my_service")
+logger = logging.getLogger("cmk.base.plugins.agent_based.my_service")
 
 def parse_my_service(string_table: list[list[str]]) -> Dict[str, Any]:
     """Parse with debugging"""
@@ -2021,7 +2017,7 @@ from typing import List
 from cmk.agent_based.v2 import Result, State, Service
 
 # Import your plugin functions
-from cmk_addons.pyugins.agent_based.my_service import (
+from cmk_addons.plugins.agent_based.my_service import (
     parse_my_service,
     discover_my_service,
     check_my_service,
@@ -2529,7 +2525,7 @@ rule_spec_temperature_monitor = CheckParameters(
     topic=Topic.ENVIRONMENT,
     name="temperature_monitor",
     parameter_form=_temperature_monitor_form_spec,
-    condition=HostAndServiceCondition(service_name="Temperature"),
+    condition=HostAndItemCondition(item_title=Title("Sensor name")),
 )
 ```
 
@@ -2597,7 +2593,7 @@ perfometer_temperature = Perfometer(
 ```python
 # File: ~/local/lib/check_mk/base/cee/plugins/bakery/temperature_monitor.py
 
-from cmk.base.pyugins.bakery.bakery_api.v1 import (
+from cmk.base.plugins.bakery.bakery_api.v1 import (
     register,
     Plugin,
     OS,
@@ -2694,6 +2690,38 @@ For additional resources:
 - CheckMK documentation for API references
 - Community forums for support and discussion
 - Local API documentation in `check_mk/plugin-api/html/`
+
+## Common Pitfalls and Solutions
+
+### Import and Path Errors
+
+**Problem**: `ModuleNotFoundError` for bakery imports
+- **Cause**: Typo in import path (`cmk.base.pyugins` instead of `cmk.base.plugins`)
+- **Solution**: Use `from cmk.base.plugins.bakery.bakery_api.v1 import ...`
+
+**Problem**: Bakery plugin not found
+- **Cause**: Wrong directory path for bakery plugins
+- **Solution**: Place in `~/local/lib/check_mk/base/cee/plugins/bakery/`
+
+### SimpleLevels and check_levels Errors
+
+**Problem**: `TypeError: '>=' not supported between instances of 'float' and 'tuple'`
+- **Cause**: Wrapping SimpleLevels parameters that are already in correct format
+- **Solution**: Pass SimpleLevels parameters directly to check_levels without modification
+
+### Ruleset Configuration Errors
+
+**Problem**: `TypeError: HostAndServiceCondition.__init__() got an unexpected keyword argument`
+- **Cause**: Using wrong condition type for check plugin
+- **Solution**: 
+  - Use `HostAndItemCondition` for checks with items (multiple services per host)
+  - Use `HostAndServiceCondition` for checks without items (single service per host)
+
+### Check Plugin Discovery Issues
+
+**Problem**: Plugin not discovered by CheckMK
+- **Cause**: Missing or incorrect entry point prefixes
+- **Solution**: Name variables correctly: `agent_section_*`, `check_plugin_*`
 
 ## CheckMK Color Class Constants
 
