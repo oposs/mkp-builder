@@ -38,21 +38,38 @@ CheckMK agent-based check plugins consist of two main components:
 ## Development Environment Setup
 
 ### Directory Structure
+
+When developing CheckMK plugins, use the following directory structure:
+
 ```
-~/local/lib/python3/cmk_addons/plugins/my_plugin
+./local/lib/python3/cmk_addons/plugins/my_plugin/
 ├── agent_based/           # Check plugins (using cmk.agent_based.v2)
+├── checkman/             # Plugin documentation (checkman format)
 ├── graphing/             # Graphing definitions (using cmk.graphing.v1)
 ├── rulesets/             # Rule specifications (using cmk.rulesets.v1)
 └── server_side_calls/    # Special agents (using cmk.server_side_calls.v1)
 
-~/local/lib/check_mk/base/cee/plugins/bakery/
+./local/lib/python3/cmk/base/cee/plugins/bakery/
 └──                       # Agent bakery plugins (using cmk.base.plugins.bakery.bakery_api.v1)
 
-~/local/share/check_mk/agents/plugins/
+./local/share/check_mk/agents/plugins/
 └──                       # Agent plugin source files
 ```
 
-> **📝 Important Path Note**: In CheckMK, `~/local/lib/check_mk` is a symlink to `~/local/lib/python3/cmk`. You may encounter both paths in documentation, error messages, and examples - they refer to the same location. This can cause confusion when debugging path-related issues or following different documentation sources.
+> **⚠️ Critical Path Setup**: 
+> - **Always use `./local/lib/python3/cmk` as the actual directory**
+> - Create `./local/lib/check_mk` as a symlink pointing to `./local/lib/python3/cmk`
+> - This prevents accidentally overwriting the symlink in production installations
+> - In a CheckMK OMD site, paths start with `~/local/` (site user's home)
+> - In regular development checkouts, use `./local/` (relative to project root)
+>
+> ```bash
+> # Setup correct structure in development
+> mkdir -p ./local/lib/python3/cmk
+> ln -s python3/cmk ./local/lib/check_mk
+> ```
+
+For a real-world example structure, see: https://github.com/oposs/cmk-oposs_smart_error
 
 ### Agent Plugin Location
 ```
@@ -612,7 +629,7 @@ Every check plugin requires:
 ### Basic Check Plugin Structure
 ```python
 #!/usr/bin/env python3
-# File: ~/local/lib/python3/cmk_addons/plugins/agent_based/my_service.py
+# File: ./local/lib/python3/cmk_addons/plugins/my_plugin/agent_based/my_service.py
 
 from cmk.agent_based.v2 import (
     AgentSection,
@@ -1042,7 +1059,7 @@ The Agent Bakery allows centralized configuration and deployment of agent plugin
 
 ### Bakery Plugin Structure
 ```python
-# File: ~/local/lib/check_mk/base/cee/plugins/bakery/my_service.py
+# File: ./local/lib/python3/cmk/base/cee/plugins/bakery/my_service.py
 
 import json
 from cmk.base.plugins.bakery.bakery_api.v1 import (
@@ -1092,7 +1109,7 @@ register.bakery_plugin(
 
 ### Bakery Ruleset Structure (CheckMK 2.3 - Modern API)
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/<family>/rulesets/ruleset_<name>_bakery.py
+# File: ./local/lib/python3/cmk_addons/plugins/<family>/rulesets/ruleset_<name>_bakery.py
 
 from cmk.rulesets.v1 import Label, Title, Help
 from cmk.rulesets.v1.form_specs import (
@@ -1151,12 +1168,12 @@ rule_spec_my_service_bakery = AgentConfig(
 ### Key Points About the Bakery API
 
 **Separation of Concerns:**
-- **Bakery Plugin**: Technical logic only (`local/lib/check_mk/base/cee/plugins/bakery/`)
-- **Bakery Ruleset**: GUI configuration only (`local/lib/python3/cmk_addons/plugins/<family>/rulesets/`)
+- **Bakery Plugin**: Technical logic only (`./local/lib/python3/cmk/base/cee/plugins/bakery/`)
+- **Bakery Ruleset**: GUI configuration only (`./local/lib/python3/cmk_addons/plugins/<family>/rulesets/`)
 - Never mix both concerns in the same file
 
 **Agent Plugin Source Location:**
-- Agent plugins should be stored in `local/share/check_mk/agents/plugins/`
+- Agent plugins should be stored in `./local/share/check_mk/agents/plugins/`
 - The bakery automatically finds them when using `source=Path('plugin_name')`
 - No need to manually read file content or specify complex paths
 
@@ -1172,7 +1189,7 @@ rule_spec_my_service_bakery = AgentConfig(
 
 ### Advanced Bakery Features
 ```python
-# File: ~/local/lib/check_mk/base/cee/plugins/bakery/my_service_advanced.py
+# File: ./local/lib/python3/cmk/base/cee/plugins/bakery/my_service_advanced.py
 
 from cmk.base.plugins.bakery.bakery_api.v1 import (
     register,
@@ -1274,7 +1291,7 @@ Rulesets allow users to configure plugin parameters through the CheckMK GUI usin
 
 ### Basic Ruleset Definition
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/rulesets/my_service.py
+# File: ./local/lib/python3/cmk_addons/plugins/my_plugin/rulesets/my_service.py
 
 from cmk.rulesets.v1 import Title, Help, Label
 from cmk.rulesets.v1.form_specs import (
@@ -1380,7 +1397,7 @@ condition=HostAndItemCondition(item_title=Title("ZPool name"))
 #### Real-World Example: OPOSS zpool iostat
 
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/rulesets/oposs_zpool_iostat.py
+# File: ./local/lib/python3/cmk_addons/plugins/oposs_zpool_iostat/rulesets/oposs_zpool_iostat.py
 
 rule_spec_oposs_zpool_iostat = CheckParameters(
     title=Title("OPOSS zpool iostat monitoring"),
@@ -1508,7 +1525,7 @@ Create visual representations of your metrics using the `cmk.graphing.v1` API.
 
 ### Metric Definitions
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/graphing/my_service.py
+# File: ./local/lib/python3/cmk_addons/plugins/my_plugin/graphing/my_service.py
 
 from cmk.graphing.v1 import Title
 from cmk.graphing.v1.metrics import (
@@ -1782,22 +1799,25 @@ def test_check_function():
 CheckMK plugins should include proper documentation in the checkman format for user reference.
 
 #### Creating Checkman Documentation
-Create documentation files in the `checkman/` directory:
+Create documentation files in the `checkman/` directory within your plugin folder:
 
 ```
-~/local/lib/python3/cmk_addons/plugins/
+./local/lib/python3/cmk_addons/plugins/my_plugin/
 ├── agent_based/
+│   └── my_service.py      # Check plugin code
 ├── checkman/              # Plugin documentation  
 │   └── my_service         # Documentation file (no extension)
 ├── graphing/
+│   └── my_service.py      # Graphing definitions
 └── rulesets/
+    └── my_service.py      # Ruleset definitions
 ```
 
 #### Checkman Format
 CheckMK uses a simple text-based format for plugin documentation:
 
 ```
-# File: ~/local/lib/python3/cmk_addons/plugins/checkman/my_service
+# File: ./local/lib/python3/cmk_addons/plugins/my_plugin/checkman/my_service
 
 title: My Service: Performance Monitoring
 agents: linux
@@ -1917,26 +1937,42 @@ parameters:
 ### Manual Installation
 1. Copy agent plugin to `/usr/lib/check_mk_agent/plugins/`
 2. Make executable: `chmod +x plugin_name`
-3. Copy check plugin to `~/local/lib/python3/cmk_addons/plugins/agent_based/`
-4. Copy ruleset definitions to `~/local/lib/python3/cmk_addons/plugins/rulesets/`
-5. Copy graphing definitions to `~/local/lib/python3/cmk_addons/plugins/graphing/`
+3. Copy check plugin to `./local/lib/python3/cmk_addons/plugins/my_plugin/agent_based/`
+4. Copy ruleset definitions to `./local/lib/python3/cmk_addons/plugins/my_plugin/rulesets/`
+5. Copy graphing definitions to `./local/lib/python3/cmk_addons/plugins/my_plugin/graphing/`
 6. Restart CheckMK: `cmk -R` or `omd restart`
 
 ### Using Agent Bakery
-1. Create bakery plugin in `~/local/lib/check_mk/base/cee/plugins/bakery/`
-2. Create rule set in `~/local/lib/python3/cmk_addons/plugins/rulesets/`
+1. Create bakery plugin in `./local/lib/python3/cmk/base/cee/plugins/bakery/`
+2. Create rule set in `./local/lib/python3/cmk_addons/plugins/my_plugin/rulesets/`
 3. Configure via CheckMK GUI under "Agents > Agent rules"
 4. Bake and deploy agents via "Agents > Agent bakery"
 
 ### Package Distribution
-```bash
-# Create MKP package
-cd ~/local/lib/python3/cmk_addons/plugins/
-tar -czf my_service_plugin.tar.gz agent_based/ bakery/ rulesets/ graphing/
 
-# Install on other CheckMK instances
-mkp install my_service_plugin.tar.gz
+For professional MKP package creation and distribution, use the **mkp-builder** tool:
+
+```bash
+# Install mkp-builder from GitHub
+git clone https://github.com/oposs/mkp-builder.git
+cd mkp-builder
+# Follow installation instructions in the repository
+
+# Create package configuration (mkp.yaml)
+mkp-builder init
+
+# Build the MKP package
+mkp-builder build
+
+# The tool handles:
+# - Proper package structure validation
+# - Version management
+# - Dependency tracking
+# - CheckMK compatibility checks
+# - Professional package metadata
 ```
+
+For more details, see: https://github.com/oposs/mkp-builder
 
 ## Debugging
 
@@ -1968,7 +2004,7 @@ cmk -d hostname
 cmk -v --debug --checks=my_service hostname
 
 # Validate plugin syntax
-python3 -m py_compile ~/local/lib/python3/cmk_addons/plugins/agent_based/my_service.py
+python3 -m py_compile ./local/lib/python3/cmk_addons/plugins/my_plugin/agent_based/my_service.py
 ```
 
 ### Logging and Debugging
@@ -2367,7 +2403,7 @@ echo "system_info Temperature Monitor v1.2.0"
 
 ### Complete Check Plugin
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/agent_based/temperature_monitor.py
+# File: ./local/lib/python3/cmk_addons/plugins/temperature_monitor/agent_based/temperature_monitor.py
 
 from cmk.agent_based.v2 import (
     AgentSection,
@@ -2476,7 +2512,7 @@ check_plugin_temperature_monitor = CheckPlugin(
 
 ### Ruleset Configuration
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/rulesets/temperature_monitor.py
+# File: ./local/lib/python3/cmk_addons/plugins/temperature_monitor/rulesets/temperature_monitor.py
 
 from cmk.rulesets.v1 import Title, Help
 from cmk.rulesets.v1.form_specs import (
@@ -2531,7 +2567,7 @@ rule_spec_temperature_monitor = CheckParameters(
 
 ### Graphing Configuration
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/graphing/temperature_monitor.py
+# File: ./local/lib/python3/cmk_addons/plugins/temperature_monitor/graphing/temperature_monitor.py
 
 from cmk.graphing.v1 import Title
 from cmk.graphing.v1.metrics import (
@@ -2591,7 +2627,7 @@ perfometer_temperature = Perfometer(
 
 #### Bakery Plugin
 ```python
-# File: ~/local/lib/check_mk/base/cee/plugins/bakery/temperature_monitor.py
+# File: ./local/lib/python3/cmk/base/cee/plugins/bakery/temperature_monitor.py
 
 from cmk.base.plugins.bakery.bakery_api.v1 import (
     register,
@@ -2627,7 +2663,7 @@ register.bakery_plugin(
 
 #### Bakery Ruleset (CheckMK 2.3 - Modern API)
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/temperature_monitor/rulesets/ruleset_temperature_monitor_bakery.py
+# File: ./local/lib/python3/cmk_addons/plugins/temperature_monitor/rulesets/ruleset_temperature_monitor_bakery.py
 
 from cmk.rulesets.v1 import Label, Title, Help
 from cmk.rulesets.v1.form_specs import (
@@ -2701,7 +2737,7 @@ For additional resources:
 
 **Problem**: Bakery plugin not found
 - **Cause**: Wrong directory path for bakery plugins
-- **Solution**: Place in `~/local/lib/check_mk/base/cee/plugins/bakery/`
+- **Solution**: Place in `./local/lib/python3/cmk/base/cee/plugins/bakery/`
 
 ### SimpleLevels and check_levels Errors
 
