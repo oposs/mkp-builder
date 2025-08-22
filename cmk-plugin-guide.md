@@ -729,6 +729,8 @@ class CheckPlugin:
 ### Advanced Features
 
 #### Metrics and Performance Data
+
+##### Basic Metric Handling
 ```python
 from cmk.agent_based.v2 import Metric, render
 
@@ -744,6 +746,99 @@ def check_my_service_with_metrics(item: str, section: Dict[str, Any]) -> CheckRe
         state=State.OK, 
         summary=f"Current value: {render.percent(value)}"
     )
+```
+
+##### Handling Missing or Temporarily Unavailable Metrics
+
+When metrics are temporarily unavailable or missing from the monitored system, there are two complementary approaches:
+
+**1. Use `float('nan')` to explicitly indicate unknown data:**
+- Much better than using 0 or other placeholder values that could be misinterpreted
+- Clearly distinguishes "no data available" from "value is zero"
+- Useful for maintaining data integrity and accurate reporting
+
+```python
+from cmk.agent_based.v2 import Metric, check_levels
+
+def check_with_explicit_unknown_handling(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    """Explicitly mark unknown data with NaN when appropriate"""
+    
+    # Example: When you want to track that a metric should exist but is currently unknown
+    cpu_value = section.get('cpu_usage')
+    if cpu_value is None:
+        # Use NaN to explicitly indicate the data is currently unknown
+        # This is better than using 0 which would be misleading
+        yield Metric("cpu_usage", float('nan'))
+        yield Result(state=State.UNKNOWN, summary="CPU usage data not available")
+    else:
+        yield from check_levels(
+            cpu_value,
+            levels_upper=params.get('cpu_levels'),
+            metric_name="cpu_usage",
+            label="CPU usage",
+            render_func=render.percent,
+        )
+```
+
+**2. Use the `optional` parameter in graph definitions:**
+- Allows graphs to display even when some metrics are missing
+- More flexible for metrics that may not always be relevant
+
+```python
+# In your graphing/ module
+from cmk.graphing.v1.graphs import Graph
+
+graph_with_optional_metrics = Graph(
+    name="my_operations_graph",
+    title=Title("Operations"),
+    simple_lines=["read_ops", "write_ops", "scrub_ops"],
+    optional=["scrub_ops"],  # Only present during scrub operations
+)
+```
+
+**When to use each approach:**
+
+**Use `float('nan')` when:**
+- The metric should normally exist but data collection failed
+- You want to preserve time series continuity with explicit gaps
+- You need to distinguish between "unknown" and "zero" values
+- The metric is always relevant but temporarily unavailable
+
+**Use `optional` in graphs when:**
+- Metrics only exist under certain conditions (e.g., scrub operations)
+- Different versions of agents provide different metric sets
+- Hardware-specific metrics that may not be present on all systems
+
+**Example combining both approaches:**
+```python
+def check_storage_with_optional_scrub(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    """Handle both required and optional metrics appropriately"""
+    
+    # Required metrics - use NaN if unexpectedly missing
+    for metric_name in ['read_ops', 'write_ops']:
+        value = section.get(metric_name)
+        if value is None:
+            # These should always exist - NaN indicates a problem
+            yield Metric(metric_name, float('nan'))
+            yield Result(state=State.UNKNOWN, 
+                        summary=f"{metric_name} data not available")
+        else:
+            yield from check_levels(
+                value,
+                levels_upper=params.get(f'{metric_name}_levels'),
+                metric_name=metric_name,
+                label=metric_name.replace('_', ' ').title(),
+            )
+    
+    # Optional metrics - only yield when present
+    scrub_ops = section.get('scrub_ops')
+    if scrub_ops is not None:  # Only exists during scrub
+        yield from check_levels(
+            scrub_ops,
+            levels_upper=params.get('scrub_ops_levels'),
+            metric_name="scrub_ops",
+            label="Scrub operations",
+        )
 ```
 
 #### Configuration Parameters
@@ -1608,6 +1703,28 @@ graph_my_service_network = Bidirectional(
 )
 ```
 
+### Graph Behavior with Missing Metrics
+
+When defining graphs in the `graphing/` module, you can use the `optional` parameter to handle metrics that may not always be present:
+
+- **Without `optional` parameter**: Graph will only display if ALL specified metrics are available
+- **With `optional` parameter**: Graph displays even when some metrics are missing (shows available metrics only)
+
+Example:
+```python
+graph_with_optional_metrics = Graph(
+    name="my_graph",
+    title=Title("My Graph"),
+    simple_lines=["metric1", "metric2", "metric3"],
+    optional=["metric2", "metric3"],  # These metrics are optional
+)
+```
+
+This is particularly useful for:
+- Metrics that appear only under certain conditions (e.g., scrub operations in ZFS)
+- Supporting different versions of monitoring agents with varying metric sets
+- Gracefully handling missing data without breaking graph display
+
 ### Perfometer Definitions
 ```python
 from cmk.graphing.v1.perfometers import (
@@ -2278,6 +2395,465 @@ check_plugin_my_service_cluster = CheckPlugin(
     cluster_check_function=cluster_check_my_service,
 )
 ```
+
+### Handling Time Units and SI Units
+
+Proper handling of time units and SI units is critical for accurate monitoring. This section covers best practices for working with metrics, ensuring you use the right units from the start.
+
+#### Golden Rule: Always Use Base SI Units
+
+**Store all metrics in base SI units:**
+- **Time**: seconds (not milliseconds, microseconds, or nanoseconds)
+- **Data**: bytes (not kilobytes, megabytes, or gigabytes)
+- **Frequency**: hertz (not kilohertz or megahertz)
+- **Temperature**: kelvin or celsius (not fahrenheit)
+- **Power**: watts (not kilowatts)
+
+This aligns perfectly with CheckMK's render functions and ensures consistency across all plugins.
+
+#### Why Base Units Matter
+
+1. **CheckMK's render functions expect base units** - `render.timespan()` expects seconds, `render.bytes()` expects bytes
+2. **Automatic scaling** - CheckMK automatically formats 0.001 seconds as "1 ms", 1024 bytes as "1 KiB"
+3. **Consistent graphing** - All metrics use the same scale
+4. **No confusion** - Everyone knows what unit is stored
+5. **Easy calculations** - No unit conversion needed for derived metrics
+
+#### Best Practice Examples
+
+##### Converting External Tool Output to Base Units
+
+Many external tools don't output in base units. Always convert at the agent or check plugin level:
+
+```python
+# AGENT PLUGIN - Convert at source when possible
+def collect_latency_data():
+    """Collect latency data and convert to seconds."""
+    # Example: External tool outputs microseconds
+    result = subprocess.run(['tool', '--latency'], capture_output=True, text=True)
+    latency_us = float(result.stdout.strip())
+    
+    # Convert to seconds before outputting
+    latency_seconds = latency_us / 1_000_000.0
+    print(f"latency {latency_seconds}")
+    
+    # Or if tool outputs nanoseconds (e.g., zpool iostat -p)
+    latency_ns = get_latency_nanoseconds()
+    latency_seconds = latency_ns / 1_000_000_000.0
+    print(f"latency {latency_seconds}")
+```
+
+##### Check Plugin with Proper Units
+
+```python
+from cmk.agent_based.v2 import (
+    CheckResult, Metric, render, check_levels
+)
+
+def check_my_service(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    # Agent already provides data in seconds (best practice)
+    latency_seconds = section.get('latency', 0)
+    response_time_seconds = section.get('response_time', 0)
+    
+    # Store metrics in base units (seconds)
+    yield Metric("latency", latency_seconds)
+    yield Metric("response_time", response_time_seconds)
+    
+    # Use check_levels with seconds
+    yield from check_levels(
+        latency_seconds,
+        levels_upper=params.get('latency_levels'),  # Also in seconds!
+        metric_name="latency",
+        label="Latency",
+        render_func=render.timespan,  # Automatically formats as ms, µs, etc.
+    )
+    
+    # For data sizes - always bytes
+    data_processed_bytes = section.get('data_processed', 0)
+    yield Metric("data_processed", data_processed_bytes)
+    
+    yield from check_levels(
+        data_processed_bytes,
+        levels_upper=params.get('data_levels'),  # In bytes
+        metric_name="data_processed",
+        label="Data processed",
+        render_func=render.bytes,  # Automatically formats as KiB, MiB, GiB
+    )
+```
+
+##### Graphing with Base Units
+
+```python
+from cmk.graphing.v1.metrics import (
+    Metric, Unit, TimeNotation, IECNotation, Color
+)
+from cmk.graphing.v1.graphs import Graph, MinimalRange
+
+# Define metrics with proper base units
+metric_latency = Metric(
+    name="latency",
+    title=Title("Latency"),
+    unit=Unit(TimeNotation()),  # Expects seconds, auto-scales display
+    color=Color.BLUE,
+)
+
+metric_response_time = Metric(
+    name="response_time", 
+    title=Title("Response Time"),
+    unit=Unit(TimeNotation()),  # Expects seconds
+    color=Color.GREEN,
+)
+
+metric_data_processed = Metric(
+    name="data_processed",
+    title=Title("Data Processed"),
+    unit=Unit(IECNotation("B")),  # Expects bytes, auto-scales to KiB, MiB, etc.
+    color=Color.ORANGE,
+)
+
+# Graphs use metrics directly
+graph_performance = Graph(
+    name="service_performance",
+    title=Title("Service Performance"),
+    simple_lines=[
+        "latency",          # Displays in appropriate unit (µs, ms, s)
+        "response_time",    # Automatically scaled
+    ],
+    minimal_range=MinimalRange(
+        lower=0,
+        upper=1,  # 1 second upper limit
+    ),
+)
+```
+
+##### Ruleset Configuration with Proper Units
+
+For user-friendly configuration, use seconds but with appropriate precision:
+
+```python
+from cmk.rulesets.v1.form_specs import (
+    SimpleLevels, Float, DefaultValue
+)
+
+def _parameter_form_my_service():
+    return Dictionary(
+        elements={
+            # For sub-second values, use Float with appropriate precision
+            "latency_levels": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Latency levels"),
+                    help_text=Help("Warning and critical levels for latency in seconds"),
+                    level_direction=LevelDirection.UPPER,
+                    form_spec_template=Float(
+                        unit_symbol="s",
+                        custom_validate=[validators.NumberInRange(min_value=0.0)],
+                    ),
+                    # Default to 50ms and 100ms (expressed in seconds)
+                    prefill_fixed_levels=DefaultValue((0.05, 0.1)),
+                ),
+            ),
+            # For larger time values
+            "timeout_levels": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Timeout levels"),
+                    help_text=Help("Warning and critical levels for timeouts in seconds"),
+                    level_direction=LevelDirection.UPPER,
+                    form_spec_template=Float(
+                        unit_symbol="s",
+                    ),
+                    prefill_fixed_levels=DefaultValue((30.0, 60.0)),  # 30s, 60s
+                ),
+            ),
+            # For data sizes - always in bytes
+            "data_levels": DictElement(
+                parameter_form=SimpleLevels(
+                    title=Title("Data processed levels"),
+                    help_text=Help("Warning and critical levels for data in bytes"),
+                    level_direction=LevelDirection.UPPER,
+                    form_spec_template=Integer(
+                        unit_symbol="B",
+                    ),
+                    # 100MB and 200MB in bytes
+                    prefill_fixed_levels=DefaultValue((104857600, 209715200)),
+                ),
+            ),
+        }
+    )
+```
+
+#### Time Unit Reference
+
+##### Common Time Conversions
+
+```python
+# Conversion constants
+NANOSECONDS_PER_MICROSECOND = 1_000
+NANOSECONDS_PER_MILLISECOND = 1_000_000
+NANOSECONDS_PER_SECOND = 1_000_000_000
+MICROSECONDS_PER_MILLISECOND = 1_000
+MICROSECONDS_PER_SECOND = 1_000_000
+MILLISECONDS_PER_SECOND = 1_000
+
+# Conversion functions
+def nanoseconds_to_seconds(ns: float) -> float:
+    return ns / 1_000_000_000.0
+
+def microseconds_to_seconds(us: float) -> float:
+    return us / 1_000_000.0
+
+def milliseconds_to_seconds(ms: float) -> float:
+    return ms / 1_000.0
+
+# Reverse conversions
+def seconds_to_nanoseconds(s: float) -> float:
+    return s * 1_000_000_000.0
+
+def seconds_to_milliseconds(s: float) -> float:
+    return s * 1_000.0
+```
+
+##### CheckMK Render Functions for Time
+
+```python
+from cmk.agent_based.v2 import render
+
+# render.timespan() expects seconds and auto-formats:
+# - "100 nanoseconds" for very small values
+# - "567 microseconds" for microsecond range
+# - "12.3 milliseconds" for millisecond range  
+# - "5.67 seconds" for second range
+# - "2 minutes 30 seconds" for minute range
+# - "3 hours 45 minutes" for hour range
+# - "2 days 6 hours" for day range
+
+# Example usage:
+value_seconds = 0.0056789  # 5.6789 milliseconds
+formatted = render.timespan(value_seconds)  # Returns "5.68 ms"
+```
+
+#### Data Size Units
+
+Similar principles apply to data size units:
+
+```python
+# Store in bytes, use IEC notation for display
+metric_data_size = Metric(
+    name="data_processed",
+    title=Title("Data Processed"),
+    unit=Unit(IECNotation("B")),  # Auto-scales: B, KiB, MiB, GiB, TiB
+    color=Color.GREEN,
+)
+
+# For SI units (1000-based) use SINotation
+metric_bandwidth = Metric(
+    name="network_bandwidth",
+    title=Title("Network Bandwidth"),
+    unit=Unit(SINotation("B/s")),  # Auto-scales: B/s, kB/s, MB/s, GB/s
+    color=Color.BLUE,
+)
+```
+
+#### Migrating Plugins with Wrong Units
+
+If you have an existing plugin that stores data in non-base units (e.g., nanoseconds instead of seconds), the best approach is a **clean break migration** using new metric names. This prevents data corruption and confusion.
+
+##### The Clean Break Strategy (Recommended)
+
+When your plugin has been storing metrics in the wrong units, create new metrics with a suffix indicating the correct unit:
+
+```python
+# agent_based/my_service_fixed.py
+from cmk.agent_based.v2 import (
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
+    DiscoveryResult,
+    Result,
+    Service,
+    State,
+    Metric,
+    render,
+    check_levels,
+)
+
+def parse_my_service(string_table):
+    """Parse agent data containing nanosecond values."""
+    parsed = {}
+    for line in string_table:
+        if len(line) >= 2:
+            device = line[0]
+            data = json.loads(line[1])
+            # Data contains latencies in nanoseconds from external tool
+            parsed[device] = data
+    return parsed
+
+def check_my_service(item: str, params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    if item not in section:
+        yield Result(state=State.UNKNOWN, summary=f"Device {item} not found")
+        return
+    
+    data = section[item]
+    
+    # Get latency in nanoseconds from agent
+    read_latency_ns = data.get('read_latency_ns', 0)
+    write_latency_ns = data.get('write_latency_ns', 0)
+    
+    # Convert to seconds (SI base unit)
+    read_latency_s = read_latency_ns / 1_000_000_000.0 if read_latency_ns != 0 else 0
+    write_latency_s = write_latency_ns / 1_000_000_000.0 if write_latency_ns != 0 else 0
+    
+    # Convert GUI thresholds from ms to seconds
+    # (User-friendly ms in GUI, but we work in seconds internally)
+    read_levels = params.get('read_latency_levels')
+    if read_levels and isinstance(read_levels, tuple) and read_levels[0] == "fixed":
+        warn_ms, crit_ms = read_levels[1]
+        read_levels = ("fixed", (warn_ms / 1000.0, crit_ms / 1000.0))
+    
+    write_levels = params.get('write_latency_levels')
+    if write_levels and isinstance(write_levels, tuple) and write_levels[0] == "fixed":
+        warn_ms, crit_ms = write_levels[1]
+        write_levels = ("fixed", (warn_ms / 1000.0, crit_ms / 1000.0))
+    
+    # Check with converted values and NEW metric names with _s suffix
+    if read_latency_s > 0:
+        yield from check_levels(
+            read_latency_s,
+            levels_upper=read_levels,
+            metric_name="read_latency_s",  # NEW metric name!
+            label="Read latency",
+            render_func=lambda v: f"{v * 1000:.2f}ms",  # Display as ms
+        )
+    else:
+        yield Metric("read_latency_s", 0)
+    
+    if write_latency_s > 0:
+        yield from check_levels(
+            write_latency_s,
+            levels_upper=write_levels,
+            metric_name="write_latency_s",  # NEW metric name!
+            label="Write latency",
+            render_func=lambda v: f"{v * 1000:.2f}ms",  # Display as ms
+        )
+    else:
+        yield Metric("write_latency_s", 0)
+
+# graphing/my_service_fixed.py
+from cmk.graphing.v1 import Title
+from cmk.graphing.v1.metrics import (
+    Color,
+    DecimalNotation,
+    Metric,
+    Unit,
+)
+from cmk.graphing.v1.graphs import Graph, MinimalRange
+
+# Define units
+unit_seconds = Unit(DecimalNotation("s"))  # Base SI unit for time
+
+# Define NEW metrics with _s suffix (in seconds)
+metric_read_latency_s = Metric(
+    name="read_latency_s",  # NEW metric name
+    title=Title("Read latency"),
+    unit=unit_seconds,
+    color=Color.CYAN,
+)
+
+metric_write_latency_s = Metric(
+    name="write_latency_s",  # NEW metric name
+    title=Title("Write latency"),
+    unit=unit_seconds,
+    color=Color.PURPLE,
+)
+
+# Create graphs using the new metrics
+graph_latencies = Graph(
+    name="service_latencies",
+    title=Title("Service Latencies"),
+    simple_lines=[
+        "read_latency_s",   # Use new metric names
+        "write_latency_s",
+    ],
+    minimal_range=MinimalRange(
+        lower=0,
+        upper=0.1,  # 100ms in seconds
+    ),
+)
+```
+
+##### Why the Compatibility Approach Doesn't Work
+
+The compatibility approach of storing metrics in the old unit while displaying them differently has several critical flaws:
+
+1. **Fraction/Constant not always available**: Not all CheckMK versions support these advanced graphing features
+2. **Confusion**: Metrics stored in non-standard units confuse administrators and break integrations
+3. **Render functions expect base units**: CheckMK's `render.timespan()` expects seconds, not nanoseconds
+4. **Third-party tools break**: External tools querying the metrics API get wrong units
+5. **Future maintenance nightmare**: New team members won't know about the unit mismatch
+
+##### Migration Checklist
+
+When fixing unit problems in an existing plugin:
+
+1. **Add suffix to metric names**: Use `_s` for seconds, `_b` for bytes, etc.
+2. **Convert at check plugin level**: Do the math in the check function
+3. **Update graphing definitions**: Create new metric definitions with correct units
+4. **Document the breaking change**: Add clear notes about the migration
+5. **Consider user-friendly thresholds**: Keep GUI in familiar units (ms) but convert internally
+
+##### Example: Real-World ZFS Pool Monitoring Fix
+
+```python
+# Before (WRONG): Storing nanoseconds
+yield Metric("read_wait", pool_data.get('read_wait', 0))  # Nanoseconds!
+
+# After (CORRECT): Converting to seconds with new name
+read_wait_ns = pool_data.get('read_wait', 0)
+read_wait_s = read_wait_ns / 1e9 if read_wait_ns != 0 else 0
+yield Metric("read_wait_s", read_wait_s)  # Seconds with _s suffix
+```
+
+#### Summary: Unit Best Practices
+
+##### For New Plugins
+1. **Always use base SI units** from the start (seconds, bytes, hertz)
+2. **Convert at the source** - If external tools output non-base units, convert in the agent
+3. **Document units clearly** in comments and help text
+4. **Use CheckMK's render functions** - They expect base units and handle formatting
+5. **Be consistent** - All time metrics in seconds, all data in bytes
+
+##### Quick Reference
+```python
+# Correct approach for new plugins
+latency_seconds = external_latency_ms / 1000.0
+yield Metric("latency", latency_seconds)  # Store in seconds
+
+# Use appropriate render function
+yield from check_levels(
+    latency_seconds,
+    levels_upper=params.get('latency_levels'),  # Also in seconds
+    metric_name="latency",
+    render_func=render.timespan,  # Formats as µs, ms, s automatically
+)
+
+# For data sizes
+data_bytes = data_kb * 1024
+yield Metric("data_size", data_bytes)  # Store in bytes
+yield from check_levels(
+    data_bytes,
+    levels_upper=params.get('data_levels'),  # In bytes
+    metric_name="data_size", 
+    render_func=render.bytes,  # Formats as KiB, MiB, GiB automatically
+)
+```
+
+##### Common External Tool Units
+- `zpool iostat -p` → nanoseconds (divide by 1e9 for seconds)
+- `df` → kilobytes (multiply by 1024 for bytes)
+- `smartctl` → varies (check documentation)
+- `iostat` → milliseconds for await (divide by 1000 for seconds)
+- Network tools → often bits (divide by 8 for bytes)
+
+Remember: When in doubt, check the tool's documentation or use the `-h` flag to verify units!
 
 ### SNMP-based Plugins
 ```python
