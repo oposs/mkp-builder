@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New
 - added more information and examples to cmk-plugin-guide.md
+- **Added comprehensive SNMP plugin development section** to cmk-plugin-guide.md covering:
+  - SimpleSNMPSection and SNMPSection classes for SNMP data collection
+  - SNMP detection specifications with all available detection functions
+  - Special OID types (OIDEnd, OIDBytes, OIDCached) with usage examples
+  - Multi-item discovery patterns for SNMP devices
+  - Complete real-world example: UPS monitoring via SNMP
+  - SNMP-specific best practices and optimization techniques
+  - Testing and troubleshooting guidance for SNMP plugins
+  - Common SNMP OIDs reference (MIB-2 standard OIDs)
 
 ### Changed
 - Reorganized cmk-plugin-guide.md structure with table of contents and improved flow

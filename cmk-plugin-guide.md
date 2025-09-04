@@ -614,6 +614,806 @@ cpu_data = {
 print(f"cpu0|{json.dumps(cpu_data, separators=(',', ':'))}")
 ```
 
+## SNMP Plugin Development
+
+### Overview
+
+SNMP plugins allow CheckMK to monitor network devices and systems that support SNMP (Simple Network Management Protocol). Unlike agent-based plugins that require software installation on the monitored host, SNMP plugins communicate over the network using the SNMP protocol.
+
+CheckMK 2.3.0 provides two main classes for SNMP plugin development:
+- **SimpleSNMPSection**: For fetching a single SNMP table or set of OIDs
+- **SNMPSection**: For fetching multiple SNMP tables simultaneously
+
+### Key Concepts
+
+#### SNMP Detection
+Before fetching SNMP data, CheckMK must determine if a device supports your plugin. Detection specifications check specific OIDs to identify compatible devices.
+
+#### OID Structure
+- OIDs (Object Identifiers) are hierarchical addresses in the SNMP tree
+- Format: `.1.3.6.1.4.1.12345.1.2.3`
+- Can fetch individual values or walk entire tables
+
+#### Entry Point Naming
+SNMP plugins must use the `snmp_section_` prefix to be discovered by CheckMK:
+```python
+snmp_section_my_device = SimpleSNMPSection(...)  # Correct
+my_snmp_section = SimpleSNMPSection(...)         # Won't be discovered!
+```
+
+### SimpleSNMPSection - Basic SNMP Plugin
+
+Use `SimpleSNMPSection` when fetching data from a single SNMP table or a set of related OIDs.
+
+#### Basic Example
+```python
+#!/usr/bin/env python3
+# File: ./local/lib/python3/cmk_addons/plugins/my_plugin/agent_based/my_snmp_device.py
+
+from cmk.agent_based.v2 import (
+    SimpleSNMPSection,
+    SNMPTree,
+    SNMPDetectSpecification,
+    CheckPlugin,
+    CheckResult,
+    DiscoveryResult,
+    Result,
+    Service,
+    State,
+    Metric,
+    exists,
+    contains,
+    check_levels,
+    render,
+)
+from typing import Any, Dict, Mapping
+
+# Parse function for SimpleSNMPSection receives a single StringTable
+def parse_my_snmp_device(string_table: list[list[str]]) -> Dict[str, Any]:
+    """Parse SNMP data from device."""
+    if not string_table or not string_table[0]:
+        return {}
+    
+    # For single OID fetch, data comes as a single row
+    if len(string_table) == 1 and len(string_table[0]) >= 3:
+        row = string_table[0]
+        return {
+            "device_name": row[0],
+            "device_status": row[1],
+            "temperature": float(row[2]) if row[2].isdigit() else 0,
+        }
+    
+    return {}
+
+# Create SimpleSNMPSection
+snmp_section_my_snmp_device = SimpleSNMPSection(
+    name="my_snmp_device",
+    parse_function=parse_my_snmp_device,
+    fetch=SNMPTree(
+        base=".1.3.6.1.4.1.12345.1.1",  # Base OID
+        oids=[
+            "1.0",  # Device name     (.1.3.6.1.4.1.12345.1.1.1.0)
+            "2.0",  # Device status   (.1.3.6.1.4.1.12345.1.1.2.0)
+            "3.0",  # Temperature     (.1.3.6.1.4.1.12345.1.1.3.0)
+        ],
+    ),
+    detect=SNMPDetectSpecification(
+        exists(".1.3.6.1.4.1.12345.1.1.1.0"),  # Device must have this OID
+    ),
+)
+
+# Discovery function
+def discover_my_snmp_device(section: Dict[str, Any]) -> DiscoveryResult:
+    if section:
+        yield Service()
+
+# Check function
+def check_my_snmp_device(section: Dict[str, Any]) -> CheckResult:
+    if not section:
+        yield Result(state=State.UNKNOWN, summary="No SNMP data")
+        return
+    
+    # Check device status
+    status = section.get("device_status", "unknown")
+    if status != "OK":
+        yield Result(state=State.WARN, summary=f"Device status: {status}")
+    else:
+        yield Result(state=State.OK, summary=f"Device status: {status}")
+    
+    # Check temperature
+    temp = section.get("temperature", 0)
+    yield from check_levels(
+        temp,
+        levels_upper=("fixed", (80.0, 90.0)),
+        metric_name="temperature",
+        label="Temperature",
+        render_func=lambda v: f"{v:.1f}°C",
+    )
+
+# Create check plugin
+check_plugin_my_snmp_device = CheckPlugin(
+    name="my_snmp_device",
+    service_name="My SNMP Device",
+    discovery_function=discover_my_snmp_device,
+    check_function=check_my_snmp_device,
+    sections=["my_snmp_device"],
+)
+```
+
+#### SNMP Table Example
+```python
+from cmk.agent_based.v2 import (
+    SimpleSNMPSection,
+    SNMPTree,
+    OIDEnd,
+    all_of,
+    contains,
+    startswith,
+)
+
+def parse_interface_table(string_table: list[list[str]]) -> Dict[str, Any]:
+    """Parse SNMP interface table."""
+    interfaces = {}
+    
+    for line in string_table:
+        if len(line) >= 4:
+            # OIDEnd gives us the index (e.g., "1", "2", "3")
+            index = line[0]
+            interfaces[f"if_{index}"] = {
+                "index": index,
+                "name": line[1],
+                "status": line[2],
+                "speed": int(line[3]) if line[3].isdigit() else 0,
+            }
+    
+    return interfaces
+
+snmp_section_interface_table = SimpleSNMPSection(
+    name="interface_table",
+    parse_function=parse_interface_table,
+    fetch=SNMPTree(
+        base=".1.3.6.1.2.1.2.2.1",  # IF-MIB::ifTable
+        oids=[
+            OIDEnd(),    # Interface index (from the OID itself)
+            "2",         # ifDescr - Interface description
+            "8",         # ifOperStatus - Operational status
+            "5",         # ifSpeed - Interface speed
+        ],
+    ),
+    detect=SNMPDetectSpecification(
+        all_of(
+            exists(".1.3.6.1.2.1.1.1.0"),  # sysDescr exists
+            contains(".1.3.6.1.2.1.1.1.0", "Linux"),  # System is Linux
+        ),
+    ),
+)
+```
+
+### SNMPSection - Advanced SNMP Plugin
+
+Use `SNMPSection` when you need to fetch data from multiple SNMP tables simultaneously.
+
+#### Multiple Tables Example
+```python
+from cmk.agent_based.v2 import (
+    SNMPSection,
+    SNMPTree,
+    OIDEnd,
+    OIDBytes,
+    OIDCached,
+    all_of,
+    any_of,
+    contains,
+    equals,
+    matches,
+    not_contains,
+)
+
+def parse_complex_device(string_tables: list[list[list[str]]]) -> Dict[str, Any]:
+    """Parse multiple SNMP tables.
+    
+    Args:
+        string_tables: A list of string tables, one for each SNMPTree in fetch
+    """
+    parsed = {}
+    
+    # First table: System information
+    if string_tables[0]:
+        sys_info = string_tables[0][0]  # Single row expected
+        parsed["system"] = {
+            "name": sys_info[0] if len(sys_info) > 0 else "",
+            "location": sys_info[1] if len(sys_info) > 1 else "",
+            "contact": sys_info[2] if len(sys_info) > 2 else "",
+        }
+    
+    # Second table: Component status table
+    parsed["components"] = {}
+    if len(string_tables) > 1:
+        for line in string_tables[1]:
+            if len(line) >= 4:
+                comp_id = line[0]  # OIDEnd gives us the component ID
+                parsed["components"][comp_id] = {
+                    "name": line[1],
+                    "status": line[2],
+                    "temperature": float(line[3]) if line[3] else 0,
+                }
+    
+    return parsed
+
+snmp_section_complex_device = SNMPSection(
+    name="complex_device",
+    parse_function=parse_complex_device,
+    fetch=[
+        # First table: System information
+        SNMPTree(
+            base=".1.3.6.1.2.1.1",
+            oids=[
+                "5.0",  # sysName
+                "6.0",  # sysLocation
+                "4.0",  # sysContact
+            ],
+        ),
+        # Second table: Component status
+        SNMPTree(
+            base=".1.3.6.1.4.1.12345.2.1",
+            oids=[
+                OIDEnd(),      # Component ID from OID
+                "2",           # Component name
+                "3",           # Component status
+                "4",           # Component temperature
+            ],
+        ),
+    ],
+    detect=SNMPDetectSpecification(
+        all_of(
+            exists(".1.3.6.1.4.1.12345.1.0"),
+            any_of(
+                equals(".1.3.6.1.4.1.12345.1.1.0", "Model-A"),
+                equals(".1.3.6.1.4.1.12345.1.1.0", "Model-B"),
+            ),
+        ),
+    ),
+)
+```
+
+### SNMP Detection Specifications
+
+Detection specifications determine whether a device supports your SNMP plugin. CheckMK provides various detection functions:
+
+#### Detection Functions
+
+```python
+from cmk.agent_based.v2 import (
+    all_of,
+    any_of,
+    exists,
+    equals,
+    contains,
+    startswith,
+    endswith,
+    matches,
+    not_exists,
+    not_equals,
+    not_contains,
+    not_startswith,
+    not_endswith,
+    not_matches,
+)
+
+# Simple detection - OID must exist
+detect=SNMPDetectSpecification(
+    exists(".1.3.6.1.4.1.12345.1.0")
+)
+
+# Value must equal specific string
+detect=SNMPDetectSpecification(
+    equals(".1.3.6.1.2.1.1.1.0", "MyDevice v1.0")
+)
+
+# Complex detection with multiple conditions
+detect=SNMPDetectSpecification(
+    all_of(
+        exists(".1.3.6.1.2.1.1.1.0"),  # sysDescr must exist
+        contains(".1.3.6.1.2.1.1.1.0", "Switch"),  # Must be a switch
+        not_contains(".1.3.6.1.2.1.1.1.0", "obsolete"),  # Not obsolete model
+    )
+)
+
+# Alternative models
+detect=SNMPDetectSpecification(
+    any_of(
+        startswith(".1.3.6.1.2.1.1.1.0", "Cisco"),
+        startswith(".1.3.6.1.2.1.1.1.0", "CISCO"),
+        matches(".1.3.6.1.2.1.1.1.0", r".*[Cc]isco.*"),
+    )
+)
+
+# Nested conditions
+detect=SNMPDetectSpecification(
+    all_of(
+        exists(".1.3.6.1.4.1.9.1.1.0"),  # Cisco enterprise OID
+        any_of(
+            contains(".1.3.6.1.2.1.1.1.0", "IOS"),
+            contains(".1.3.6.1.2.1.1.1.0", "NX-OS"),
+            contains(".1.3.6.1.2.1.1.1.0", "IOS-XE"),
+        ),
+    )
+)
+```
+
+#### Best Practices for Detection
+
+1. **Check sysDescr first** (`.1.3.6.1.2.1.1.1.0`) - Most efficient for device identification
+2. **Use enterprise OIDs** - Vendor-specific OIDs for precise detection
+3. **Avoid expensive operations** - Complex regex or multiple OID fetches slow discovery
+4. **Be specific** - Prevent false positives by checking multiple criteria
+
+### Special OID Types
+
+CheckMK provides special OID types for specific data handling:
+
+#### OIDEnd - Get the trailing OID part
+```python
+from cmk.agent_based.v2 import OIDEnd
+
+# When walking .1.3.6.1.4.1.12345.1.2.1:
+# .1.3.6.1.4.1.12345.1.2.1.1 -> OIDEnd gives "1"
+# .1.3.6.1.4.1.12345.1.2.1.2 -> OIDEnd gives "2"
+# .1.3.6.1.4.1.12345.1.2.1.3 -> OIDEnd gives "3"
+
+fetch=SNMPTree(
+    base=".1.3.6.1.4.1.12345.1.2.1",
+    oids=[
+        OIDEnd(),  # Gets the index/suffix
+        "2",       # Gets .1.3.6.1.4.1.12345.1.2.1.2.<index>
+    ],
+)
+```
+
+#### OIDBytes - Get raw bytes as integers
+```python
+from cmk.agent_based.v2 import OIDBytes
+
+# For MAC addresses, binary data, etc.
+fetch=SNMPTree(
+    base=".1.3.6.1.2.1.2.2.1",
+    oids=[
+        OIDBytes("6"),  # ifPhysAddress - MAC address as byte list
+    ],
+)
+
+def parse_mac_address(string_table):
+    for line in string_table:
+        if line[0]:  # MAC address as list of integers
+            mac_bytes = line[0]
+            mac_str = ":".join(f"{b:02x}" for b in mac_bytes)
+```
+
+#### OIDCached - Cache expensive OIDs
+```python
+from cmk.agent_based.v2 import OIDCached
+
+# For large, rarely-changing values
+fetch=SNMPTree(
+    base=".1.3.6.1.4.1.12345.1",
+    oids=[
+        "1.0",                # Normal fetch
+        OIDCached("2.0"),     # Cached - for large/expensive data
+    ],
+)
+```
+
+### Multi-Item Discovery with SNMP
+
+For devices with multiple similar components (interfaces, sensors, etc.):
+
+```python
+def discover_interfaces(section: Dict[str, Any]) -> DiscoveryResult:
+    """Discover one service per interface."""
+    for if_name, if_data in section.items():
+        # Skip down interfaces if configured
+        if if_data.get("status") != "down":
+            yield Service(
+                item=if_name,
+                parameters={"speed": if_data.get("speed", 0)},
+            )
+
+def check_interface(
+    item: str,
+    params: Mapping[str, Any],
+    section: Dict[str, Any]
+) -> CheckResult:
+    """Check specific interface."""
+    if item not in section:
+        yield Result(state=State.UNKNOWN, summary=f"Interface {item} not found")
+        return
+    
+    if_data = section[item]
+    status = if_data.get("status", "unknown")
+    
+    if status == "up":
+        state = State.OK
+    elif status == "down":
+        state = State.CRIT
+    else:
+        state = State.WARN
+    
+    yield Result(state=state, summary=f"Interface status: {status}")
+    
+    # Add metrics
+    speed = if_data.get("speed", 0)
+    yield Metric("if_speed", speed)
+
+check_plugin_interfaces = CheckPlugin(
+    name="my_interfaces",
+    service_name="Interface %s",  # %s replaced with item
+    discovery_function=discover_interfaces,
+    check_function=check_interface,
+    sections=["interface_table"],
+)
+```
+
+### Real-World Example: UPS Monitoring
+
+Here's a complete example monitoring a UPS device via SNMP:
+
+```python
+#!/usr/bin/env python3
+# File: ./local/lib/python3/cmk_addons/plugins/ups_monitor/agent_based/ups_monitor.py
+
+from cmk.agent_based.v2 import (
+    SimpleSNMPSection,
+    SNMPTree,
+    SNMPDetectSpecification,
+    CheckPlugin,
+    CheckResult,
+    DiscoveryResult,
+    Result,
+    Service,
+    State,
+    Metric,
+    render,
+    check_levels,
+    all_of,
+    contains,
+    exists,
+)
+from typing import Any, Dict, Mapping
+
+def parse_ups_status(string_table: list[list[str]]) -> Dict[str, Any]:
+    """Parse UPS SNMP data."""
+    if not string_table or not string_table[0]:
+        return {}
+    
+    # Parse single row of UPS data
+    row = string_table[0]
+    parsed = {}
+    
+    # Map numeric status to readable string
+    status_map = {
+        "1": "unknown",
+        "2": "onLine",
+        "3": "onBattery",
+        "4": "onBoost",
+        "5": "sleeping",
+        "6": "bypass",
+        "7": "rebooting",
+        "8": "standBy",
+        "9": "onBuck",
+    }
+    
+    if len(row) >= 6:
+        parsed = {
+            "status": status_map.get(row[0], "unknown"),
+            "battery_voltage": float(row[1]) / 10 if row[1] else 0,  # Decivolts to volts
+            "battery_current": float(row[2]) / 10 if row[2] else 0,  # Deciamps to amps
+            "battery_remain": int(row[3]) if row[3] else 0,  # Minutes
+            "battery_charge": int(row[4]) if row[4] else 0,  # Percentage
+            "input_voltage": float(row[5]) / 10 if row[5] else 0,  # Decivolts to volts
+        }
+    
+    return parsed
+
+# Create SNMP section
+snmp_section_ups_status = SimpleSNMPSection(
+    name="ups_status",
+    parse_function=parse_ups_status,
+    fetch=SNMPTree(
+        base=".1.3.6.1.4.1.318.1.1.1",  # APC UPS MIB
+        oids=[
+            "4.1.1.0",   # upsBasicOutputStatus
+            "2.3.1.0",   # upsAdvBatteryActualVoltage
+            "2.3.4.0",   # upsAdvBatteryCurrent
+            "2.2.3.0",   # upsAdvBatteryRunTimeRemaining (minutes)
+            "2.2.1.0",   # upsAdvBatteryCapacity (percentage)
+            "3.3.1.0",   # upsAdvInputVoltage
+        ],
+    ),
+    detect=SNMPDetectSpecification(
+        all_of(
+            exists(".1.3.6.1.4.1.318.1.1.1.1.1.1.0"),  # APC UPS identifier
+            contains(".1.3.6.1.2.1.1.1.0", "APC"),
+        ),
+    ),
+)
+
+def discover_ups_status(section: Dict[str, Any]) -> DiscoveryResult:
+    """Discover UPS if data is available."""
+    if section:
+        yield Service()
+
+def check_ups_status(params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
+    """Check UPS status and metrics."""
+    if not section:
+        yield Result(state=State.UNKNOWN, summary="No data from UPS")
+        return
+    
+    # Check UPS operational status
+    status = section.get("status", "unknown")
+    if status == "onLine":
+        yield Result(state=State.OK, summary=f"Status: {status}")
+    elif status in ["onBattery", "onBoost", "onBuck"]:
+        yield Result(state=State.WARN, summary=f"Status: {status}")
+    else:
+        yield Result(state=State.CRIT, summary=f"Status: {status}")
+    
+    # Battery charge with levels
+    charge = section.get("battery_charge", 0)
+    yield from check_levels(
+        charge,
+        levels_lower=params.get("battery_charge_lower", ("fixed", (20, 10))),
+        metric_name="battery_charge",
+        label="Battery charge",
+        render_func=render.percent,
+        boundaries=(0, 100),
+    )
+    
+    # Battery runtime
+    runtime_minutes = section.get("battery_remain", 0)
+    runtime_seconds = runtime_minutes * 60
+    yield from check_levels(
+        runtime_seconds,
+        levels_lower=params.get("battery_runtime_lower", ("fixed", (600, 300))),
+        metric_name="battery_runtime",
+        label="Battery runtime",
+        render_func=render.timespan,
+    )
+    
+    # Input voltage
+    voltage = section.get("input_voltage", 0)
+    yield from check_levels(
+        voltage,
+        levels_upper=params.get("voltage_upper", ("fixed", (250, 260))),
+        levels_lower=params.get("voltage_lower", ("fixed", (210, 200))),
+        metric_name="input_voltage",
+        label="Input voltage",
+        render_func=lambda v: f"{v:.1f}V",
+    )
+    
+    # Additional metrics without levels
+    yield Metric("battery_voltage", section.get("battery_voltage", 0))
+    yield Metric("battery_current", section.get("battery_current", 0))
+
+# Create check plugin
+check_plugin_ups_status = CheckPlugin(
+    name="ups_status",
+    service_name="UPS Status",
+    discovery_function=discover_ups_status,
+    check_function=check_ups_status,
+    check_ruleset_name="ups_status",
+    check_default_parameters={
+        "battery_charge_lower": ("fixed", (20, 10)),
+        "battery_runtime_lower": ("fixed", (600, 300)),  # 10min, 5min in seconds
+        "voltage_upper": ("fixed", (250, 260)),
+        "voltage_lower": ("fixed", (210, 200)),
+    },
+    sections=["ups_status"],
+)
+```
+
+### SNMP Plugin Best Practices
+
+#### 1. Efficient OID Selection
+```python
+# GOOD: Fetch only needed OIDs
+fetch=SNMPTree(
+    base=".1.3.6.1.2.1.2.2.1",
+    oids=["2", "5", "8"],  # Only what you need
+)
+
+# BAD: Fetching entire subtree when not needed
+fetch=SNMPTree(
+    base=".1.3.6.1.2.1.2.2",
+    oids=[OIDEnd()],  # Gets everything - expensive!
+)
+```
+
+#### 2. Robust Parsing
+```python
+def parse_snmp_data(string_table: list[list[str]]) -> Dict[str, Any]:
+    """Parse with proper error handling."""
+    parsed = {}
+    
+    for line in string_table:
+        # Always check data availability
+        if len(line) < 3:
+            continue
+        
+        try:
+            # Safe type conversion
+            value = float(line[2]) if line[2] else 0
+            
+            # Handle SNMP special values
+            if value == 2147483647:  # Common "no data" value
+                value = None
+            
+            parsed[line[0]] = value
+            
+        except (ValueError, TypeError):
+            # Log but don't crash
+            continue
+    
+    return parsed
+```
+
+#### 3. Handle SNMP Data Types
+```python
+def parse_snmp_values(value: str) -> Any:
+    """Convert SNMP string values to appropriate Python types."""
+    
+    # Handle common SNMP encodings
+    if value == "":
+        return None
+    
+    # Hex strings (MAC addresses, etc.)
+    if value.startswith("0x"):
+        return value[2:]
+    
+    # Gauge32/Counter32/Integer32
+    if value.isdigit():
+        return int(value)
+    
+    # Timeticks (hundredths of seconds)
+    if ":" in value and "." in value:  # "1:23:45:67.89"
+        parts = value.replace(".", ":").split(":")
+        if len(parts) == 5:
+            days = int(parts[0]) if parts[0] else 0
+            hours = int(parts[1]) if parts[1] else 0
+            minutes = int(parts[2]) if parts[2] else 0
+            seconds = int(parts[3]) if parts[3] else 0
+            hundredths = int(parts[4]) if parts[4] else 0
+            total_seconds = (days * 86400 + hours * 3600 + 
+                           minutes * 60 + seconds + hundredths / 100)
+            return total_seconds
+    
+    return value  # Return as string if no conversion applies
+```
+
+#### 4. Optimize Detection
+```python
+# GOOD: Check sysDescr first (cached by CheckMK)
+detect=SNMPDetectSpecification(
+    all_of(
+        contains(".1.3.6.1.2.1.1.1.0", "MyVendor"),
+        exists(".1.3.6.1.4.1.12345.1.0"),
+    )
+)
+
+# BAD: Expensive detection
+detect=SNMPDetectSpecification(
+    all_of(
+        exists(".1.3.6.1.4.1.12345.1.2.3.4.5.6.7.8.9.0"),  # Deep OID
+        matches(".1.3.6.1.4.1.12345.1.1.0", r".*[Vv]ersion [2-9].*"),  # Complex regex
+    )
+)
+```
+
+### Testing SNMP Plugins
+
+#### Manual SNMP Testing
+```bash
+# Test SNMP connectivity
+snmpget -v2c -c public 192.168.1.100 .1.3.6.1.2.1.1.1.0
+
+# Walk SNMP tree
+snmpwalk -v2c -c public 192.168.1.100 .1.3.6.1.2.1.2.2.1
+
+# Test with CheckMK
+cmk --debug -vvI --detect-plugins=my_snmp_device hostname
+
+# Force SNMP scan
+cmk --debug -vv --check=my_snmp_device hostname
+```
+
+#### Unit Testing SNMP Plugins
+```python
+import pytest
+from cmk.agent_based.v2 import Result, State, Metric
+
+def test_parse_ups_status():
+    """Test parsing UPS SNMP data."""
+    # Simulate SNMP response
+    string_table = [["2", "1320", "25", "30", "95", "2301"]]
+    
+    result = parse_ups_status(string_table)
+    
+    assert result["status"] == "onLine"
+    assert result["battery_voltage"] == 132.0  # Decivolts to volts
+    assert result["battery_charge"] == 95
+    assert result["input_voltage"] == 230.1
+
+def test_check_ups_status():
+    """Test UPS check function."""
+    section = {
+        "status": "onBattery",
+        "battery_charge": 15,
+        "battery_remain": 8,
+        "input_voltage": 195,
+    }
+    
+    params = {
+        "battery_charge_lower": ("fixed", (20, 10)),
+        "battery_runtime_lower": ("fixed", (600, 300)),
+    }
+    
+    results = list(check_ups_status(params, section))
+    
+    # Should have warning for onBattery status
+    assert any(r.state == State.WARN for r in results if isinstance(r, Result))
+    
+    # Should have critical for low battery
+    assert any(r.state == State.CRIT for r in results if isinstance(r, Result))
+```
+
+### Common SNMP OIDs Reference
+
+#### Standard MIB-2 OIDs
+```python
+# System information
+SNMP_SYS_DESCR    = ".1.3.6.1.2.1.1.1.0"     # System description
+SNMP_SYS_OBJECTID = ".1.3.6.1.2.1.1.2.0"     # System OID
+SNMP_SYS_UPTIME   = ".1.3.6.1.2.1.1.3.0"     # Uptime in timeticks
+SNMP_SYS_CONTACT  = ".1.3.6.1.2.1.1.4.0"     # System contact
+SNMP_SYS_NAME     = ".1.3.6.1.2.1.1.5.0"     # System name
+SNMP_SYS_LOCATION = ".1.3.6.1.2.1.1.6.0"     # System location
+
+# Interface table
+SNMP_IF_TABLE     = ".1.3.6.1.2.1.2.2.1"     # Interface table
+SNMP_IF_DESCR     = ".1.3.6.1.2.1.2.2.1.2"   # Interface description
+SNMP_IF_SPEED     = ".1.3.6.1.2.1.2.2.1.5"   # Interface speed
+SNMP_IF_STATUS    = ".1.3.6.1.2.1.2.2.1.8"   # Operational status
+SNMP_IF_IN_OCTETS = ".1.3.6.1.2.1.2.2.1.10"  # Incoming bytes
+SNMP_IF_OUT_OCTETS= ".1.3.6.1.2.1.2.2.1.16"  # Outgoing bytes
+
+# HOST-RESOURCES-MIB
+SNMP_HR_STORAGE   = ".1.3.6.1.2.1.25.2.3.1"  # Storage table
+SNMP_HR_CPU_LOAD  = ".1.3.6.1.2.1.25.3.3.1.2" # CPU load
+```
+
+### Troubleshooting SNMP Plugins
+
+#### Common Issues and Solutions
+
+1. **Plugin not discovered**
+   - Verify naming: Must start with `snmp_section_`
+   - Check detection specification matches device
+   - Ensure OIDs exist on device
+
+2. **No data received**
+   - Test SNMP connectivity with snmpwalk
+   - Verify community string and SNMP version
+   - Check firewall rules (UDP port 161)
+
+3. **Parse errors**
+   - Add debug logging to parse function
+   - Check for empty or malformed SNMP responses
+   - Verify OID data types match expectations
+
+4. **Performance issues**
+   - Reduce number of OIDs fetched
+   - Use OIDCached for large/static values
+   - Optimize detection specification
+
 ## Check Plugin Development
 
 ### API Version 2 Overview
