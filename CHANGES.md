@@ -8,34 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
-- added more information and examples to cmk-plugin-guide.md
-- **Added comprehensive SNMP plugin development section** to cmk-plugin-guide.md covering:
-  - SimpleSNMPSection and SNMPSection classes for SNMP data collection
-  - SNMP detection specifications with all available detection functions
-  - Special OID types (OIDEnd, OIDBytes, OIDCached) with usage examples
-  - Multi-item discovery patterns for SNMP devices
-  - Complete real-world example: UPS monitoring via SNMP
-  - SNMP-specific best practices and optimization techniques
-  - Testing and troubleshooting guidance for SNMP plugins
-  - Common SNMP OIDs reference (MIB-2 standard OIDs)
+- refactored plugin guide with added snmp plugin info
 
 ### Changed
-- Reorganized cmk-plugin-guide.md structure with table of contents and improved flow
-- Clarified SimpleLevels documentation to remove confusion about parameter formats
-- Added "Common Pitfalls and Solutions" section to cmk-plugin-guide.md
-- **IMPORTANT**: Updated directory structure guidance to use `./local/lib/python3/cmk` as primary path with `./local/lib/check_mk` as symlink to prevent production issues
-- Changed all path examples from `~/local/` to `./local/` for development checkouts (OMD sites still use `~/local/`)
-- Updated package distribution section to reference mkp-builder from GitHub (oposs/mkp-builder)
-- Fixed checkman directory location to be inside plugin-specific folder structure
-- Removed manual package creation instructions in favor of mkp-builder tool
 
 ### Fixed
-- Fixed critical typos in cmk-plugin-guide.md (`cmk.base.pyugins` → `cmk.base.plugins`)
-- Corrected bakery plugin directory paths for consistency
-- Fixed missing `parameter_form=` in ruleset example code
-- Fixed temperature monitor example to use correct `HostAndItemCondition`
-- Removed redundant and contradictory information about SimpleLevels handling
-- Fixed inconsistent checkman path documentation
 
 ## 2.0.2 - 2025-08-07
 ### Fixed
