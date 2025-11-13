@@ -17,6 +17,23 @@ yield Metric("latency", latency_seconds)
 yield Metric("latency", latency_ns)  # Storing nanoseconds
 ```
 
+### Metric Naming: Always Use Prefixes!
+
+**⚠️ IMPORTANT**: Always prefix metric names with `mycompany_myplugin_` format!
+
+See **[01-quickstart.md](01-quickstart.md#metric-names-critical)** for complete naming conventions.
+
+**Quick reminder:**
+```python
+# ❌ WRONG - Generic names
+yield Metric("cpu_usage", 45.0)
+
+# ✅ CORRECT - Prefixed
+yield Metric("acme_widget_cpu_usage", 45.0)
+```
+
+**Why?** CheckMK has ~1,000 built-in metrics. Unprefixed names cause conflicts and can be overridden by CheckMK updates. See [01-quickstart.md](01-quickstart.md) and [13-metric-migration.md](13-metric-migration.md) for details.
+
 ### Basic Metric Definition
 
 ```python
@@ -36,23 +53,23 @@ unit_bytes = Unit(IECNotation("B"))  # Auto-scales: B, KiB, MiB, GiB
 unit_seconds = Unit(TimeNotation())  # Auto-scales: ns, µs, ms, s
 unit_celsius = Unit(DecimalNotation("°C"))
 
-# Define metrics
-metric_cpu_usage = Metric(
-    name="cpu_usage",
+# Define metrics with mycompany_myplugin prefix
+metric_mycompany_myplugin_cpu = Metric(
+    name="mycompany_myplugin_cpu",  # Prefixed!
     title=Title("CPU Usage"),
     unit=unit_percentage,
     color=Color.BLUE,
 )
 
-metric_memory = Metric(
-    name="memory",
+metric_mycompany_myplugin_memory = Metric(
+    name="mycompany_myplugin_memory",  # Prefixed!
     title=Title("Memory Usage"),
     unit=unit_bytes,
     color=Color.GREEN,
 )
 
-metric_latency = Metric(
-    name="latency",
+metric_mycompany_myplugin_latency = Metric(
+    name="mycompany_myplugin_latency",  # Prefixed!
     title=Title("Latency"),
     unit=unit_seconds,  # Expects seconds!
     color=Color.ORANGE,
@@ -68,13 +85,13 @@ from cmk.graphing.v1.graphs import (
     Bidirectional,
 )
 
-# Simple graph
+# Simple graph - use prefixed metric names
 graph_performance = Graph(
-    name="performance",
+    name="mycompany_myplugin_performance",
     title=Title("System Performance"),
     simple_lines=[
-        "cpu_usage",
-        "memory_percent",
+        "mycompany_myplugin_cpu",
+        "mycompany_myplugin_memory",
     ],
     minimal_range=MinimalRange(
         lower=0,
@@ -84,25 +101,29 @@ graph_performance = Graph(
 
 # Graph with optional metrics
 graph_with_optional = Graph(
-    name="operations",
+    name="mycompany_myplugin_operations",
     title=Title("Operations"),
-    simple_lines=["read_ops", "write_ops", "scrub_ops"],
-    optional=["scrub_ops"],  # Only present during scrub
+    simple_lines=[
+        "mycompany_myplugin_read_ops",
+        "mycompany_myplugin_write_ops",
+        "mycompany_myplugin_scrub_ops",
+    ],
+    optional=["mycompany_myplugin_scrub_ops"],  # Only present during scrub
 )
 
 # Bidirectional graph (network, I/O)
 graph_network = Bidirectional(
-    name="network_traffic",
+    name="mycompany_myplugin_network_traffic",
     title=Title("Network Traffic"),
     lower=Graph(
-        name="network_in",
+        name="mycompany_myplugin_network_in",
         title=Title("Inbound"),
-        compound_lines=["bytes_in"],
+        compound_lines=["mycompany_myplugin_bytes_in"],
     ),
     upper=Graph(
-        name="network_out",
+        name="mycompany_myplugin_network_out",
         title=Title("Outbound"),
-        compound_lines=["bytes_out"],
+        compound_lines=["mycompany_myplugin_bytes_out"],
     ),
 )
 ```
@@ -115,20 +136,23 @@ def check_with_nan(section):
     cpu = section.get('cpu_usage')
     if cpu is None:
         # Explicitly mark as unknown
-        yield Metric("cpu_usage", float('nan'))
+        yield Metric("mycompany_myplugin_cpu", float('nan'))
         yield Result(state=State.UNKNOWN, summary="CPU data not available")
     else:
-        yield Metric("cpu_usage", cpu)
+        yield Metric("mycompany_myplugin_cpu", cpu)
 ```
 
 #### Optional Metrics in Graphs
 ```python
 # Graph displays even when some metrics missing
 graph_adaptive = Graph(
-    name="adaptive_graph",
+    name="mycompany_myplugin_adaptive",
     title=Title("Adaptive Metrics"),
-    simple_lines=["always_present", "sometimes_present"],
-    optional=["sometimes_present"],  # Won't break graph if missing
+    simple_lines=[
+        "mycompany_myplugin_always_present",
+        "mycompany_myplugin_sometimes_present",
+    ],
+    optional=["mycompany_myplugin_sometimes_present"],  # Won't break graph if missing
 )
 ```
 
@@ -153,11 +177,11 @@ def check_my_service(section):
     # External tool gives nanoseconds
     latency_ns = section.get('latency_ns', 0)
     latency_s = nanoseconds_to_seconds(latency_ns)
-    
+
     yield from check_levels(
         latency_s,  # Pass seconds!
         levels_upper=("fixed", (0.05, 0.1)),  # 50ms, 100ms in seconds
-        metric_name="latency",
+        metric_name="mycompany_myplugin_latency",  # Prefixed!
         render_func=render.timespan,  # Formats appropriately
     )
 ```
@@ -174,32 +198,32 @@ from cmk.graphing.v1.perfometers import (
 
 # Simple perfometer
 perfometer_cpu = Perfometer(
-    name="cpu_usage",
+    name="mycompany_myplugin_cpu_perf",
     focus_range=FocusRange(
         lower=Closed(0),
         upper=Closed(100),
     ),
-    segments=["cpu_usage"],
+    segments=["mycompany_myplugin_cpu"],
 )
 
 # Stacked perfometer
 perfometer_stacked = Stacked(
-    name="cpu_memory",
+    name="mycompany_myplugin_cpu_memory",
     lower=Perfometer(
-        name="cpu_perf",
+        name="mycompany_myplugin_cpu_perf",
         focus_range=FocusRange(
             lower=Closed(0),
             upper=Closed(100),
         ),
-        segments=["cpu_usage"],
+        segments=["mycompany_myplugin_cpu"],
     ),
     upper=Perfometer(
-        name="mem_perf",
+        name="mycompany_myplugin_mem_perf",
         focus_range=FocusRange(
             lower=Closed(0),
             upper=Closed(100),
         ),
-        segments=["memory_percent"],
+        segments=["mycompany_myplugin_memory_percent"],
     ),
 )
 ```
@@ -215,6 +239,7 @@ from cmk.graphing.v1.metrics import (
     DecimalNotation,
     Metric,
     Unit,
+    TimeNotation,
 )
 from cmk.graphing.v1.graphs import Graph, MinimalRange
 
@@ -223,42 +248,42 @@ unit_percentage = Unit(DecimalNotation("%"))
 unit_volts = Unit(DecimalNotation("V"))
 unit_seconds = Unit(TimeNotation())
 
-# Metrics
-metric_battery_charge = Metric(
-    name="battery_charge",
+# Metrics with mycompany_ups prefix
+metric_mycompany_ups_battery_charge = Metric(
+    name="mycompany_ups_battery_charge",
     title=Title("Battery Charge"),
     unit=unit_percentage,
     color=Color.GREEN,
 )
 
-metric_battery_runtime = Metric(
-    name="battery_runtime",
+metric_mycompany_ups_battery_runtime = Metric(
+    name="mycompany_ups_battery_runtime",
     title=Title("Battery Runtime"),
     unit=unit_seconds,  # Stored in seconds!
     color=Color.BLUE,
 )
 
-metric_input_voltage = Metric(
-    name="input_voltage",
+metric_mycompany_ups_input_voltage = Metric(
+    name="mycompany_ups_input_voltage",
     title=Title("Input Voltage"),
     unit=unit_volts,
     color=Color.ORANGE,
 )
 
-metric_battery_voltage = Metric(
-    name="battery_voltage",
+metric_mycompany_ups_battery_voltage = Metric(
+    name="mycompany_ups_battery_voltage",
     title=Title("Battery Voltage"),
     unit=unit_volts,
     color=Color.PURPLE,
 )
 
 # Graphs
-graph_ups_battery = Graph(
-    name="ups_battery",
+graph_mycompany_ups_battery = Graph(
+    name="mycompany_ups_battery",
     title=Title("UPS Battery Status"),
     simple_lines=[
-        "battery_charge",
-        "battery_runtime",
+        "mycompany_ups_battery_charge",
+        "mycompany_ups_battery_runtime",
     ],
     minimal_range=MinimalRange(
         lower=0,
@@ -266,12 +291,12 @@ graph_ups_battery = Graph(
     ),
 )
 
-graph_ups_voltage = Graph(
-    name="ups_voltage",
+graph_mycompany_ups_voltage = Graph(
+    name="mycompany_ups_voltage",
     title=Title("UPS Voltages"),
     simple_lines=[
-        "input_voltage",
-        "battery_voltage",
+        "mycompany_ups_input_voltage",
+        "mycompany_ups_battery_voltage",
     ],
     minimal_range=MinimalRange(
         lower=0,
@@ -314,43 +339,28 @@ def check_with_custom_render(section):
     yield from check_levels(
         section.get("ops_per_sec", 0),
         levels_upper=("fixed", (1000, 2000)),
-        metric_name="operations",
+        metric_name="mycompany_myplugin_operations",  # Prefixed!
         render_func=_render_operations_per_second,
         label="Operations",
     )
 ```
 
-### Migration: Fixing Wrong Units
+### Renaming Existing Metrics
 
-If you stored metrics in wrong units (e.g., nanoseconds), use NEW metric names:
-
-```python
-# OLD (wrong): Stored nanoseconds
-yield Metric("latency", latency_ns)  # ❌
-
-# NEW (correct): Store seconds with new name
-latency_s = latency_ns / 1e9
-yield Metric("latency_s", latency_s)  # ✅ New metric name!
-
-# In graphing
-metric_latency_s = Metric(
-    name="latency_s",  # New name
-    title=Title("Latency"),
-    unit=Unit(TimeNotation()),  # Expects seconds
-    color=Color.BLUE,
-)
-```
+If you need to rename metrics (to add prefixes or fix units), see **[13-metric-migration.md](13-metric-migration.md)** for the complete guide on using CheckMK's Translation system to preserve historical data.
 
 ### Best Practices
 
 #### DO ✅
+- **Always prefix metric names** with `mycompany_myplugin_` format
 - Store metrics in base SI units (seconds, bytes)
 - Convert at check plugin level
 - Use CheckMK's render functions
 - Handle missing metrics with NaN or optional
-- Use meaningful metric names
+- Use meaningful, descriptive metric names
 
 #### DON'T ❌
+- Use generic unprefixed metric names (e.g., `cpu`, `latency`, `temp`)
 - Store non-base units (ms, KB, ns)
 - Convert in graphing definitions
 - Assume metrics always present
@@ -364,28 +374,28 @@ def check_time_metrics(section):
     # From milliseconds
     response_ms = section.get("response_ms", 0)
     response_s = response_ms / 1000.0
-    yield Metric("response_time", response_s)
-    
+    yield Metric("mycompany_myplugin_response_time", response_s)
+
     # From nanoseconds
     latency_ns = section.get("latency_ns", 0)
     latency_s = latency_ns / 1e9
-    yield Metric("latency", latency_s)
-    
+    yield Metric("mycompany_myplugin_latency", latency_s)
+
     # Already in seconds
     uptime_s = section.get("uptime", 0)
-    yield Metric("uptime", uptime_s)
+    yield Metric("mycompany_myplugin_uptime", uptime_s)
 
 # Data size metrics
 def check_data_metrics(section):
     # From kilobytes
     size_kb = section.get("size_kb", 0)
     size_bytes = size_kb * 1024
-    yield Metric("size", size_bytes)
-    
+    yield Metric("mycompany_myplugin_size", size_bytes)
+
     # From megabits
     bandwidth_mbit = section.get("bandwidth_mbit", 0)
     bandwidth_bytes = bandwidth_mbit * 125_000
-    yield Metric("bandwidth", bandwidth_bytes)
+    yield Metric("mycompany_myplugin_bandwidth", bandwidth_bytes)
 ```
 
 ### Testing Graphs
@@ -394,15 +404,18 @@ def check_data_metrics(section):
 # Test metric output
 def test_metrics():
     from check_plugin import check_my_service
-    
+
     section = {"latency_ns": 50_000_000}  # 50ms
     results = list(check_my_service(section))
-    
+
     metrics = [r for r in results if isinstance(r, Metric)]
     assert len(metrics) > 0
-    
-    # Check correct unit conversion
-    latency_metric = next((m for m in metrics if m.name == "latency"), None)
+
+    # Check correct unit conversion and prefixed name
+    latency_metric = next(
+        (m for m in metrics if m.name == "mycompany_myplugin_latency"), None
+    )
+    assert latency_metric is not None
     assert latency_metric.value == 0.05  # 50ms = 0.05s
 ```
 

@@ -21,8 +21,8 @@ from cmk.rulesets.v1.form_specs import (
 from cmk.rulesets.v1.rule_specs import (
     CheckParameters,
     Topic,
-    HostAndServiceCondition,  # For single service
-    HostAndItemCondition,      # For multi-item services
+    HostCondition,           # For single service (no item)
+    HostAndItemCondition,    # For multi-item services
 )
 
 def _form_spec_my_service():
@@ -46,31 +46,30 @@ rule_spec_my_service = CheckParameters(
     topic=Topic.APPLICATIONS,
     name="my_service",  # Must match check_ruleset_name
     parameter_form=_form_spec_my_service,
-    condition=HostAndServiceCondition(),  # See below!
+    condition=HostCondition(),  # See below!
 )
 ```
 
 ### ⚠️ CRITICAL: Condition Type Selection
 
-#### For Single Service per Host
+#### For Single Service per Host (no item)
 ```python
-# ✅ Use HostAndServiceCondition
-condition=HostAndServiceCondition()
+# ✅ Use HostCondition for services created with Service()
+condition=HostCondition()
 ```
 
 #### For Multi-Item Services
 ```python
-# ✅ Use HostAndItemCondition
+# ✅ Use HostAndItemCondition for services created with Service(item="name")
 condition=HostAndItemCondition(
     item_title=Title("Device name")  # Describes the item
 )
 ```
 
-#### Common Mistake
-```python
-# ❌ WRONG - Type mismatch causes errors!
-condition=HostAndServiceCondition(service_name="My Service")  # NO!
-```
+#### How to Choose
+- Check your discovery function:
+  - `yield Service()` → use `HostCondition()`
+  - `yield Service(item="something")` → use `HostAndItemCondition()`
 
 ### SimpleLevels Configuration
 
@@ -129,7 +128,7 @@ from cmk.rulesets.v1.form_specs import (
 from cmk.rulesets.v1.rule_specs import (
     CheckParameters,
     Topic,
-    HostAndServiceCondition,
+    HostCondition,
 )
 
 def _form_spec_ups():
@@ -189,7 +188,7 @@ rule_spec_ups = CheckParameters(
     topic=Topic.POWER,
     name="ups_status",  # Matches check_ruleset_name in plugin
     parameter_form=_form_spec_ups,
-    condition=HostAndServiceCondition(),  # Single service
+    condition=HostCondition(),  # Single service (no item)
 )
 ```
 
@@ -443,7 +442,7 @@ def test_ruleset_params():
 
 | Problem | Solution |
 |---------|----------|
-| Wrong condition type | Use HostAndItemCondition for multi-item |
+| Wrong condition type | Use HostCondition for single, HostAndItemCondition for multi-item |
 | SimpleLevels wrapping | Pass directly to check_levels |
 | Missing ruleset name | Must match check_ruleset_name |
 | Wrong topic | Check available Topic constants |

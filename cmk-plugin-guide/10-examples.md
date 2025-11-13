@@ -1,6 +1,8 @@
 # CheckMK Complete Examples
 ## Real-World Production Patterns
 
+> **⚠️ Important**: All examples follow the naming conventions from [01-quickstart.md](01-quickstart.md). Metrics use the `mycompany_myplugin_` format to avoid conflicts with CheckMK's built-in metrics.
+
 ### Complete Temperature Monitor Plugin
 
 #### Agent Plugin
@@ -97,11 +99,12 @@ def check_temperature_monitor(item, params, section):
     temperature = sensor_data["temperature"]
     
     # Check temperature levels
+    # ✅ Using prefixed metric name
     yield from check_levels(
         temperature,
         levels_upper=params.get("levels_upper"),
         levels_lower=params.get("levels_lower"),
-        metric_name="temperature",
+        metric_name="acme_temp_sensor_temperature",
         label="Temperature",
         render_func=lambda v: f"{v:.1f}°C",
     )
@@ -144,30 +147,31 @@ from cmk.graphing.v1.perfometers import Perfometer, FocusRange, Closed
 
 unit_celsius = Unit(DecimalNotation("°C"))
 
-metric_temperature = Metric(
-    name="temperature",
+# ✅ Using prefixed metric name (matches check plugin)
+metric_acme_temp_sensor_temperature = Metric(
+    name="acme_temp_sensor_temperature",
     title=Title("Temperature"),
     unit=unit_celsius,
     color=Color.ORANGE,
 )
 
-graph_temperature = Graph(
-    name="temperature",
+graph_acme_temp_sensor = Graph(
+    name="acme_temp_sensor_temperature",
     title=Title("Temperature"),
-    simple_lines=["temperature"],
+    simple_lines=["acme_temp_sensor_temperature"],
     minimal_range=MinimalRange(
         lower=0,
         upper=100,
     ),
 )
 
-perfometer_temperature = Perfometer(
-    name="temperature",
+perfometer_acme_temp_sensor = Perfometer(
+    name="acme_temp_sensor_temperature",
     focus_range=FocusRange(
         lower=Closed(0),
         upper=Closed(100),
     ),
-    segments=["temperature"],
+    segments=["acme_temp_sensor_temperature"],
 )
 ```
 
@@ -313,14 +317,15 @@ def collect_with_fallback(primary_cmd, fallback_cmd, timeout=30):
 #### Pattern: Rate Calculation
 ```python
 from cmk.agent_based.v2 import get_rate, get_value_store
+import time
 
 def check_with_rates(section):
     """Calculate rates between checks"""
     value_store = get_value_store()
-    
+
     # Get current counter
     counter = section.get("bytes_total", 0)
-    
+
     # Calculate rate
     rate = get_rate(
         value_store,
@@ -329,8 +334,9 @@ def check_with_rates(section):
         counter,
         raise_overflow=True
     )
-    
-    yield Metric("bytes_per_sec", rate)
+
+    # ✅ Using prefixed metric name
+    yield Metric("mycompany_myplugin_bytes_per_sec", rate)
     yield Result(
         state=State.OK,
         summary=f"Rate: {render.bytes(rate)}/s"
@@ -362,22 +368,25 @@ def check_with_dependencies(section):
 
 #### Pattern: Automatic Threshold Adjustment
 ```python
+from datetime import datetime
+
 def check_with_auto_thresholds(section):
     """Adjust thresholds based on context"""
     value = section.get("metric", 0)
-    
+
     # Adjust thresholds based on time of day
     hour = datetime.now().hour
-    
+
     if 9 <= hour < 17:  # Business hours
         levels = ("fixed", (80.0, 90.0))
     else:  # Off hours
         levels = ("fixed", (95.0, 99.0))
-    
+
+    # ✅ Using prefixed metric name
     yield from check_levels(
         value,
         levels_upper=levels,
-        metric_name="metric",
+        metric_name="mycompany_myplugin_adaptive_metric",
         label="Adaptive metric",
     )
 ```
@@ -421,7 +430,18 @@ result = run_check_test(check_my_service, test_section)
 assert result['worst_state'] == State.WARN
 ```
 
+### Key Takeaways
+
+**Naming Conventions Applied:**
+- ✅ All metric names use prefixes: `acme_temp_sensor_`, `mycompany_myplugin_`
+- ✅ Entry points use correct prefixes: `agent_section_`, `check_plugin_`, `metric_`, `graph_`, `perfometer_`
+- ✅ Plugin names are descriptive and unique: `temperature_monitor`, `smart_status`
+
+**Why This Matters:**
+These examples demonstrate real-world plugins that follow the naming conventions from [01-quickstart.md](01-quickstart.md). Using prefixed metric names prevents conflicts with CheckMK's ~1,000 built-in metrics and makes your plugins more maintainable.
+
 ### See Also
-- [01-quickstart.md](01-quickstart.md) - Getting started
+- [01-quickstart.md](01-quickstart.md) - Naming conventions and getting started
 - [09-advanced-patterns.md](09-advanced-patterns.md) - Advanced techniques
 - [11-reference.md](11-reference.md) - API reference
+- [13-metric-migration.md](13-metric-migration.md) - How to rename existing metrics

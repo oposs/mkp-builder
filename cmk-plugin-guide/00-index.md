@@ -12,8 +12,10 @@
 | **Create my first plugin** | [01-quickstart.md](01-quickstart.md) | - |
 | **Monitor a network device via SNMP** | [02-snmp-plugins.md](02-snmp-plugins.md) | [04-check-plugins.md](04-check-plugins.md) |
 | **Collect data from a Linux/Windows host** | [03-agent-plugins.md](03-agent-plugins.md) | [04-check-plugins.md](04-check-plugins.md) |
+| **Monitor via REST API or custom protocol** | [12-special-agents.md](12-special-agents.md) | [04-check-plugins.md](04-check-plugins.md) |
 | **Process and check collected data** | [04-check-plugins.md](04-check-plugins.md) | [05-metrics-graphing.md](05-metrics-graphing.md) |
 | **Add graphs and visualizations** | [05-metrics-graphing.md](05-metrics-graphing.md) | - |
+| **Rename metrics while preserving history** | [13-metric-migration.md](13-metric-migration.md) | [05-metrics-graphing.md](05-metrics-graphing.md) |
 | **Configure thresholds in the GUI** | [06-rulesets.md](06-rulesets.md) | - |
 | **Deploy plugins automatically** | [07-bakery.md](07-bakery.md) | [06-rulesets.md](06-rulesets.md) |
 | **Debug a non-working plugin** | [08-testing-debugging.md](08-testing-debugging.md) | - |
@@ -29,9 +31,12 @@ START: What type of monitoring?
 │   └── Then → 04-check-plugins.md → 05-metrics-graphing.md
 ├── Agent-based (Linux/Windows) → 03-agent-plugins.md
 │   └── Then → 04-check-plugins.md → 05-metrics-graphing.md
+├── API/Cloud/Special Protocol → 12-special-agents.md
+│   └── Then → 04-check-plugins.md → 05-metrics-graphing.md
 └── Already have data → 04-check-plugins.md
     └── Then → 05-metrics-graphing.md
 
+Need to rename metrics? → 13-metric-migration.md
 Need GUI configuration? → 06-rulesets.md
 Need automatic deployment? → 07-bakery.md
 Having problems? → 08-testing-debugging.md
@@ -48,10 +53,12 @@ Having problems? → 08-testing-debugging.md
 #### Data Collection
 - **[02-snmp-plugins.md](02-snmp-plugins.md)** - SNMP monitoring via network
 - **[03-agent-plugins.md](03-agent-plugins.md)** - Host-based data collection
+- **[12-special-agents.md](12-special-agents.md)** - Server-side collection (APIs, cloud services)
 
 #### Data Processing
 - **[04-check-plugins.md](04-check-plugins.md)** - Parse data, determine states, generate metrics
 - **[05-metrics-graphing.md](05-metrics-graphing.md)** - Visualizations and performance data
+- **[13-metric-migration.md](13-metric-migration.md)** - Rename metrics while preserving historical data
 
 #### Configuration & Deployment
 - **[06-rulesets.md](06-rulesets.md)** - GUI configuration forms

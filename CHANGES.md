@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New
 - refactored plugin guide with added snmp plugin info
+- added renaming information to plugin guide
+- added special_agent informtion to plugin guide
 
 ### Changed
 

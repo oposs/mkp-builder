@@ -69,17 +69,18 @@ def check_my_service(section):
     if not section:
         yield Result(state=State.UNKNOWN, summary="No data")
         return
-    
+
     status = section.get("status", "UNKNOWN")
     value = int(section.get("value", 0))
-    
+
     if status == "OK":
         state = State.OK
     else:
         state = State.WARN
-    
+
     yield Result(state=state, summary=f"Status: {status}")
-    yield Metric("value", value)
+    # Use prefixed metric name (replace 'mycompany' with your org)
+    yield Metric("mycompany_myservice_value", value)
 
 # CRITICAL: Name must start with check_plugin_
 check_plugin_my_service = CheckPlugin(
@@ -106,16 +107,56 @@ cmk -II target_hostname
 cmk -v --debug target_hostname
 ```
 
-### Entry Point Prefixes (MANDATORY!)
+### Naming Conventions (CRITICAL!)
+
+#### Entry Point Prefixes (MANDATORY!)
 
 Variables MUST start with these prefixes to be discovered:
 - `agent_section_` - Agent data parsers
-- `snmp_section_` - SNMP data parsers  
+- `snmp_section_` - SNMP data parsers
 - `check_plugin_` - Check logic
 - `inventory_plugin_` - Inventory
+- `special_agent_` - Special agent configs (in server_side_calls/)
+- `rule_spec_` - Ruleset definitions
 
 **Wrong**: `my_section = AgentSection(...)`  ❌
 **Right**: `agent_section_my_service = AgentSection(...)`  ✅
+
+#### Metric Names (CRITICAL!)
+
+**⚠️ ALWAYS prefix metric names with `mycompany_myplugin_` format!**
+
+CheckMK has ~1,000 built-in metrics. Unprefixed names will conflict and break:
+
+```python
+# ❌ WRONG - Generic names risk conflicts
+yield Metric("cpu_usage", 45.0)
+yield Metric("temperature", 65.0)
+yield Metric("latency", 0.05)
+
+# ✅ CORRECT - Prefixed with company and plugin name
+yield Metric("acme_widget_cpu_usage", 45.0)
+yield Metric("acme_widget_temperature", 65.0)
+yield Metric("acme_widget_latency", 0.05)
+```
+
+**Format**: `mycompany_myplugin_{metric_name}`
+- Replace `mycompany` with your company/organization
+- Replace `myplugin` with your plugin name
+- Example prefixes: `acme_weather_`, `myorg_api_`, `contoso_ups_`
+
+**Why this matters:**
+- Prevents conflicts with CheckMK's built-in metrics
+- Prevents your metrics being overridden by CheckMK updates
+- Makes metric ownership clear
+- Enables safe metric renaming via translations (see [13-metric-migration.md](13-metric-migration.md))
+
+#### Plugin/Section Names
+
+Choose descriptive, unique names for your plugins:
+- Use your organization prefix: `mycompany_service_name`
+- Examples: `acme_weather`, `contoso_ups`, `myorg_api`
+- Avoid generic names: `status`, `metrics`, `monitor`
 
 ### Common Pitfalls
 
