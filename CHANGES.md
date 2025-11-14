@@ -8,14 +8,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+
+### Changed
+
+### Fixed
+
+## 2.0.3 - 2025-11-14
+### New
 - refactored plugin guide with added snmp plugin info
 - added renaming information to plugin guide
 - added special_agent informtion to plugin guide
 
 ### Changed
 - change all CheckMk strings to Checkmk
-
-### Fixed
 
 ## 2.0.2 - 2025-08-07
 ### Fixed
