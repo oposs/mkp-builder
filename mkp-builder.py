@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CheckMK MKP Package Builder (mkp-builder)
+Checkmk MKP Package Builder (mkp-builder)
 Builds MKP packages from local directory structure using Python standard library only.
 """
 
@@ -60,7 +60,7 @@ class Logger:
             print(f"{Colors.BLUE}[VERBOSE]{Colors.NC} {message}")
 
 class MKPBuilder:
-    """CheckMK MKP Package Builder"""
+    """Checkmk MKP Package Builder"""
     
     def __init__(self):
         self.logger = Logger()
@@ -166,7 +166,7 @@ class MKPBuilder:
         local_dir = self.work_dir / 'local'
         if not local_dir.exists():
             raise ValueError(f"Local directory not found: {local_dir}\n"
-                           "This script must be run from a CheckMK plugin project directory.")
+                           "This script must be run from a Checkmk plugin project directory.")
         
         self.logger.debug(f"Package name: {self.config['name']}")
         self.logger.debug(f"Package version: {self.config['version']}")
@@ -404,7 +404,7 @@ class MKPBuilder:
     
     def build(self) -> Path:
         """Main build process"""
-        self.logger.info("CheckMK MKP Package Builder starting...")
+        self.logger.info("Checkmk MKP Package Builder starting...")
         
         # Load configuration
         self.load_config()
@@ -443,7 +443,7 @@ class MKPBuilder:
 def create_parser() -> argparse.ArgumentParser:
     """Create command line argument parser"""
     parser = argparse.ArgumentParser(
-        description='CheckMK MKP Package Builder',
+        description='Checkmk MKP Package Builder',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -471,13 +471,13 @@ Configuration:
     parser.add_argument('--description',
                        help='Package description (default: from config)')
     parser.add_argument('--version-min-required',
-                       help='Minimum CheckMK version (default: from config)')
+                       help='Minimum Checkmk version (default: from config)')
     parser.add_argument('--version-packaged',
-                       help='CheckMK version used for packaging (default: from config)')
+                       help='Checkmk version used for packaging (default: from config)')
     parser.add_argument('--download-url',
                        help='Download URL (default: from config)')
     parser.add_argument('--version-usable-until',
-                       help='The last CheckMK version this plugin is compatible with (default: from config)')
+                       help='The last Checkmk version this plugin is compatible with (default: from config)')
     parser.add_argument('--output-dir', default='.',
                        help='Output directory (default: current directory)')
     

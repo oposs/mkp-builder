@@ -1,8 +1,8 @@
-# CheckMK MKP Package Structure and Build Guide
+# Checkmk MKP Package Structure and Build Guide
 
 ## Overview
 
-MKP (Monitoring Konfiguration Package) files are CheckMK's package format for distributing plugins, checks, and extensions. This document provides a comprehensive guide to understanding and building MKP packages.
+MKP (Monitoring Konfiguration Package) files are Checkmk's package format for distributing plugins, checks, and extensions. This document provides a comprehensive guide to understanding and building MKP packages.
 
 ## MKP Package Structure
 
@@ -20,7 +20,7 @@ package.mkp (gzip compressed)
 ├── info                    # Python dict with package metadata
 ├── info.json              # JSON version of metadata
 ├── agents.tar             # Agent plugins and scripts
-├── cmk_addons_plugins.tar # CheckMK addon plugins
+├── cmk_addons_plugins.tar # Checkmk addon plugins
 └── lib.tar                # Library files (bakery plugins)
 ```
 
@@ -70,9 +70,9 @@ plugins/
 
 **Installation Path**: `/usr/lib/check_mk_agent/plugins/`
 
-### 3. CheckMK Addons (`cmk_addons_plugins.tar`)
+### 3. Checkmk Addons (`cmk_addons_plugins.tar`)
 
-Contains CheckMK server-side components:
+Contains Checkmk server-side components:
 
 ```
 agent_based/
@@ -99,7 +99,7 @@ plugin_name/              # Plugin-specific directory
 
 ### 4. Library Components (`lib.tar`)
 
-Contains CheckMK core extensions:
+Contains Checkmk core extensions:
 
 ```
 check_mk/base/cee/plugins/bakery/
@@ -114,7 +114,7 @@ Your source project should follow this structure:
 
 ```
 project_root/
-├── local/                # CheckMK local directory structure
+├── local/                # Checkmk local directory structure
 │   ├── lib/
 │   │   └── python3/
 │   │       ├── cmk/      # note three is local/check_mk -> python3/cmk
@@ -182,7 +182,7 @@ PACKAGE_TITLE="Human Readable Title"
 PACKAGE_AUTHOR="Author Name <email@domain.com>"
 PACKAGE_DESCRIPTION="Multi-line package description"
 
-# CheckMK Compatibility
+# Checkmk Compatibility
 CMK_MIN_VERSION="2.3.0p1"
 CMK_PACKAGED_VERSION="2.3.0p34"
 
@@ -219,9 +219,9 @@ The build process automatically maps files from your local directory structure:
 - Format: `MAJOR.MINOR.PATCH`
 - Example: `1.0.0`, `1.2.3`, `2.0.0-beta1`
 
-### CheckMK Version Compatibility
-- `version.min_required`: Minimum CheckMK version
-- `version.packaged`: CheckMK version used for packaging
+### Checkmk Version Compatibility
+- `version.min_required`: Minimum Checkmk version
+- `version.packaged`: Checkmk version used for packaging
 - `version.usable_until`: Maximum compatible version (optional)
 
 ## Validation and Testing
@@ -262,7 +262,7 @@ The build process automatically maps files from your local directory structure:
 
 ### Installation Issues
 
-**Issue**: Package not recognized by CheckMK
+**Issue**: Package not recognized by Checkmk
 - **Cause**: Invalid metadata format
 - **Solution**: Validate info/info.json structure
 
@@ -272,16 +272,16 @@ The build process automatically maps files from your local directory structure:
 
 **Issue**: Import errors after installation
 - **Cause**: Missing dependencies or API mismatches
-- **Solution**: Verify CheckMK version compatibility
+- **Solution**: Verify Checkmk version compatibility
 
 ## Best Practices
 
 ### Development
 1. **Consistent Naming**: Use same name throughout all components
-2. **API Compatibility**: Use appropriate CheckMK API versions
+2. **API Compatibility**: Use appropriate Checkmk API versions
 3. **Error Handling**: Implement robust error handling
 4. **Documentation**: Include comprehensive checkman documentation
-5. **Testing**: Test on clean CheckMK instance
+5. **Testing**: Test on clean Checkmk instance
 
 ### Packaging
 1. **Version Control**: Tag releases in version control
@@ -307,7 +307,7 @@ For projects with multiple related packages, consider:
 - Coordinated versioning
 
 ### Enterprise Features
-Some features require CheckMK Enterprise Edition:
+Some features require Checkmk Enterprise Edition:
 - Agent Bakery integration
 - Certain API features
 - Advanced configuration options
@@ -342,4 +342,4 @@ python3 -m py_compile file.py
 ./local/share/check_mk/agents/plugins/plugin_name
 ```
 
-This documentation provides everything needed to understand and build CheckMK MKP packages from scratch.
+This documentation provides everything needed to understand and build Checkmk MKP packages from scratch.

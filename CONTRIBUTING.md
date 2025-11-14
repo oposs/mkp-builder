@@ -1,6 +1,6 @@
-# Contributing to CheckMK MKP Builder
+# Contributing to Checkmk MKP Builder
 
-Thank you for your interest in contributing to the CheckMK MKP Builder Action! This document provides guidelines for contributing to the project.
+Thank you for your interest in contributing to the Checkmk MKP Builder Action! This document provides guidelines for contributing to the project.
 
 ## How to Contribute
 
@@ -10,7 +10,7 @@ Thank you for your interest in contributing to the CheckMK MKP Builder Action! T
 2. **Use the issue template** when creating new issues
 3. **Provide detailed information**:
    - Operating system and version
-   - CheckMK version
+   - Checkmk version
    - Action version
    - Complete error messages
    - Minimal reproduction case
@@ -36,7 +36,7 @@ Thank you for your interest in contributing to the CheckMK MKP Builder Action! T
 
 You can test the action locally by:
 
-1. **Setting up a test repository** with CheckMK plugin structure
+1. **Setting up a test repository** with Checkmk plugin structure
 2. **Copying your modified files** to the test repository
 3. **Running the build script directly**:
    ```bash
@@ -85,7 +85,7 @@ Test the action with:
 
 1. **Minimal plugin structure** (agent plugin only)
 2. **Complete plugin structure** (all components)
-3. **Various CheckMK versions**
+3. **Various Checkmk versions**
 4. **Different input combinations**
 5. **Edge cases** (missing files, invalid syntax)
 
@@ -97,7 +97,7 @@ Test the action with:
 - [ ] Python validation works correctly
 - [ ] Verbose output is helpful
 - [ ] Error messages are clear
-- [ ] Generated MKP installs correctly in CheckMK
+- [ ] Generated MKP installs correctly in Checkmk
 - [ ] Documentation is updated
 
 ## Release Process
@@ -128,4 +128,4 @@ Contributors will be recognized in:
 - README acknowledgments
 - GitHub contributors list
 
-Thank you for helping make the CheckMK MKP Builder better for everyone!
+Thank you for helping make the Checkmk MKP Builder better for everyone!

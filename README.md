@@ -1,19 +1,19 @@
-# CheckMK MKP Builder Action
+# Checkmk MKP Builder Action
 
 [![GitHub release](https://img.shields.io/github/release/oposs/mkp-builder.svg)](https://github.com/oposs/mkp-builder/releases)
 [![GitHub marketplace](https://img.shields.io/badge/marketplace-mkp--builder-blue?logo=github)](https://github.com/marketplace/actions/build-checkmk-mkp-package)
 
-> **⚠️ Disclaimer**: This is an independent, community-developed tool and is **not officially affiliated with or endorsed by CheckMK GmbH**. This project was developed by reverse-engineering existing MKP package formats and studying CheckMK documentation. Any issues, bugs, or incompatibilities are our responsibility and should be reported to this project's issue tracker, not to CheckMK support.
+> **⚠️ Disclaimer**: This is an independent, community-developed tool and is **not officially affiliated with or endorsed by Checkmk GmbH**. This project was developed by reverse-engineering existing MKP package formats and studying Checkmk documentation. Any issues, bugs, or incompatibilities are our responsibility and should be reported to this project's issue tracker, not to Checkmk support.
 
-> **📚 Plugin Development Guide**: Since many users of mkp-builder are developing CheckMK plugins, we maintain comprehensive modular documentation for CheckMK 2.3.x plugin development in [`cmk-plugin-guide/`](cmk-plugin-guide/). The guide covers agent plugins, SNMP plugins, special agents, check plugins, rulesets, graphing, bakery integration, and metric migration with practical examples and best practices. Start with the [guide index](cmk-plugin-guide/00-index.md) or read the [guide overview](cmk-plugin-guide/README.md).
+> **📚 Plugin Development Guide**: Since many users of mkp-builder are developing Checkmk plugins, we maintain comprehensive modular documentation for Checkmk 2.3.x plugin development in [`cmk-plugin-guide/`](cmk-plugin-guide/). The guide covers agent plugins, SNMP plugins, special agents, check plugins, rulesets, graphing, bakery integration, and metric migration with practical examples and best practices. Start with the [guide index](cmk-plugin-guide/00-index.md) or read the [guide overview](cmk-plugin-guide/README.md).
 
 > **🚨 Breaking Changes in v2.0.0**: If you're upgrading from v1.x, please note that v2.0.0 introduces breaking changes. The configuration file format has changed from `.mkp-builderrc` to `.mkp-builder.ini` with INI format syntax. GitHub Action input names have also been updated. See the [changelog](CHANGES.md) for full migration details.
 
-A reusable GitHub Action for building CheckMK MKP (Monitoring Konfiguration Package) files from local directory structures.
+A reusable GitHub Action for building Checkmk MKP (Monitoring Konfiguration Package) files from local directory structures.
 
 ## Features
 
-- 🏗️ **Automated MKP Building**: Converts CheckMK plugin directory structures into installable MKP packages
+- 🏗️ **Automated MKP Building**: Converts Checkmk plugin directory structures into installable MKP packages
 - 🔧 **Configurable**: Supports all build options via inputs or configuration files
 - 🐍 **Python Validation**: Optional syntax checking of Python files before packaging
 - 📦 **Artifact Ready**: Outputs package information for easy artifact upload
@@ -104,10 +104,10 @@ jobs:
 | `title` | Package title | ❌ | From config file |
 | `author` | Author name and email | ❌ | From config file |
 | `description` | Package description | ❌ | From config file |
-| `version-min-required` | Minimum CheckMK version | ❌ | From config file |
-| `version-packaged` | CheckMK packaging version | ❌ | From config file |
+| `version-min-required` | Minimum Checkmk version | ❌ | From config file |
+| `version-packaged` | Checkmk packaging version | ❌ | From config file |
 | `download-url` | Download URL | ❌ | From config file |
-| `version-usable-until` | The last CheckMK version this plugin is compatible with | ❌ | From config file |
+| `version-usable-until` | The last Checkmk version this plugin is compatible with | ❌ | From config file |
 | `output-dir` | Output directory | ❌ | `.` |
 | `validate-python` | Validate Python files | ❌ | `true` |
 | `verbose` | Enable verbose output | ❌ | `false` |
@@ -134,7 +134,7 @@ description = A plugin that does amazing things.
     This description can span multiple lines
     and provides better formatting options.
 
-# CheckMK Compatibility
+# Checkmk Compatibility
 version.min_required = 2.3.0p1
 version.packaged = 2.3.0p34
 version.usable_until = 3.0.0
@@ -146,7 +146,7 @@ validate_python = true
 
 ## Required Directory Structure
 
-Your repository must follow the CheckMK local directory structure:
+Your repository must follow the Checkmk local directory structure:
 
 ```
 repository/
@@ -271,13 +271,13 @@ package.mkp (tar file, gzip compressed)
 ├── info                    # Python dict with package metadata
 ├── info.json              # JSON version of metadata
 ├── agents.tar             # Agent plugins and scripts
-├── cmk_addons_plugins.tar # CheckMK addon plugins
+├── cmk_addons_plugins.tar # Checkmk addon plugins
 └── lib.tar                # Library files (bakery plugins)
 ```
 
-## Supported CheckMK Versions
+## Supported Checkmk Versions
 
-- **CheckMK 2.3.x** (default)
+- **Checkmk 2.3.x** (default)
 
 ## File Mapping
 
@@ -359,7 +359,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 1. Fork this repository
 2. Make your changes
-3. Test with a sample CheckMK plugin repository
+3. Test with a sample Checkmk plugin repository
 4. Submit a pull request
 
 ### Reporting Issues
@@ -368,20 +368,20 @@ Please use the [issue tracker](https://github.com/oposs/mkp-builder/issues) to r
 
 ## License
 
-This project is licensed under the same terms as CheckMK - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the same terms as Checkmk - see the [LICENSE](LICENSE) file for details.
 
 ## Related Projects
 
-- [CheckMK Official Documentation](https://docs.checkmk.com/)
-- [CheckMK Plugin Development Guide](https://docs.checkmk.com/latest/en/devel_intro.html)
+- [Checkmk Official Documentation](https://docs.checkmk.com/)
+- [Checkmk Plugin Development Guide](https://docs.checkmk.com/latest/en/devel_intro.html)
 - [MKP Package Format Specification](https://docs.checkmk.com/latest/en/mkps.html)
 
 ## Acknowledgments
 
-- Built for the CheckMK community
+- Built for the Checkmk community
 - Inspired by the need for automated MKP package building
 - Thanks to all contributors and testers
 
 ---
 
-Made with ❤️ for the CheckMK community
+Made with ❤️  for the Checkmk community

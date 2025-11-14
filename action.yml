@@ -1,5 +1,5 @@
-name: 'Build CheckMK MKP Package'
-description: 'Build a CheckMK MKP package from local directory structure'
+name: 'Build Checkmk MKP Package'
+description: 'Build a Checkmk MKP package from local directory structure'
 author: 'OETIKER+PARTNER AG'
 
 inputs:
@@ -19,16 +19,16 @@ inputs:
     description: 'Package description (default: from config file)'
     required: false
   version-min-required:
-    description: 'Minimum CheckMK version (default: from config file)'
+    description: 'Minimum Checkmk version (default: from config file)'
     required: false
   version-packaged:
-    description: 'CheckMK version used for packaging (default: from config file)'
+    description: 'Checkmk version used for packaging (default: from config file)'
     required: false
   download-url:
     description: 'Download URL (default: from config file)'
     required: false
   version-usable-until:
-    description: 'The last CheckMK version this plugin is compatible with (default: from config file)'
+    description: 'The last Checkmk version this plugin is compatible with (default: from config file)'
     required: false
   output-dir:
     description: 'Output directory for MKP file (default: current directory)'
