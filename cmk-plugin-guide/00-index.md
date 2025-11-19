@@ -18,6 +18,7 @@
 | **Rename metrics while preserving history** | [13-metric-migration.md](13-metric-migration.md) | [05-metrics-graphing.md](05-metrics-graphing.md) |
 | **Configure thresholds in the GUI** | [06-rulesets.md](06-rulesets.md) | - |
 | **Deploy plugins automatically** | [07-bakery.md](07-bakery.md) | [06-rulesets.md](06-rulesets.md) |
+| **Send alerts to external systems** | [14-notifications.md](14-notifications.md) | - |
 | **Debug a non-working plugin** | [08-testing-debugging.md](08-testing-debugging.md) | - |
 | **Handle cluster environments** | [09-advanced-patterns.md](09-advanced-patterns.md) | - |
 | **See a complete example** | [10-examples.md](10-examples.md) | - |
@@ -39,6 +40,7 @@ START: What type of monitoring?
 Need to rename metrics? → 13-metric-migration.md
 Need GUI configuration? → 06-rulesets.md
 Need automatic deployment? → 07-bakery.md
+Need custom alerts? → 14-notifications.md
 Having problems? → 08-testing-debugging.md
 ```
 
@@ -63,6 +65,7 @@ Having problems? → 08-testing-debugging.md
 #### Configuration & Deployment
 - **[06-rulesets.md](06-rulesets.md)** - GUI configuration forms
 - **[07-bakery.md](07-bakery.md)** - Automatic agent deployment
+- **[14-notifications.md](14-notifications.md)** - Custom alert integrations (Slack, Discord, etc.)
 
 #### Advanced Topics
 - **[08-testing-debugging.md](08-testing-debugging.md)** - Troubleshooting and validation

@@ -38,12 +38,13 @@ A complete special agent plugin consists of four parts:
 
 ```
 ~/local/lib/python3/cmk_addons/plugins/my_plugin/
+├── __init__.py                  # Package marker
 ├── libexec/
 │   └── agent_my_plugin          # 1. Executable data collector
 ├── server_side_calls/
-│   └── special_agent.py         # 2. Command builder
+│   └── my_plugin.py             # 2. Command builder
 ├── rulesets/
-│   └── special_agent.py         # 3. GUI configuration
+│   └── my_plugin.py             # 3. GUI configuration
 └── agent_based/
     └── my_plugin.py             # 4. Check plugin (data processor)
 ```
@@ -114,20 +115,27 @@ if __name__ == "__main__":
    chmod 755 agent_my_plugin
    ```
 
-2. **Password Handling**: Always call `replace_passwords()` first
+2. **Entry Point**: Must include `if __name__ == "__main__":` block
+   ```python
+   if __name__ == "__main__":
+       sys.exit(main())
+   ```
+   **Without this, the script will not execute when called from the command line!**
+
+3. **Password Handling**: Always call `replace_passwords()` first
    ```python
    from cmk.utils.password_store import replace_passwords
    replace_passwords()  # Must be FIRST thing in main()
    ```
 
-3. **Output Format**: Standard CheckMK agent output
+4. **Output Format**: Standard CheckMK agent output
    ```python
    print("<<<section_name>>>")
    print("key1 value1")
    print("key2 value2")
    ```
 
-4. **Error Handling**: Write errors to stderr, return non-zero on failure
+5. **Error Handling**: Write errors to stderr, return non-zero on failure
 
 ### JSON Output Pattern
 
@@ -164,12 +172,13 @@ Converts GUI ruleset parameters into command-line arguments for the special agen
 ### Basic Implementation
 
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/my_plugin/server_side_calls/special_agent.py
+# File: ~/local/lib/python3/cmk_addons/plugins/my_plugin/server_side_calls/my_plugin.py
 
 from collections.abc import Iterator
 from pydantic import BaseModel
 from cmk.server_side_calls.v1 import (
     HostConfig,
+    Secret,
     SpecialAgentCommand,
     SpecialAgentConfig,
 )
@@ -177,7 +186,7 @@ from cmk.server_side_calls.v1 import (
 class Params(BaseModel):
     """Type-safe parameter model"""
     username: str
-    password: tuple[str, str]  # ("password", "stored_password_id") or ("store", "id")
+    password: Secret
     port: int | None = None
     protocol: str = "https"
 
@@ -188,9 +197,9 @@ def commands_function(
     """Build command-line arguments"""
 
     # Build argument list
-    args: list[str | tuple[str, str, str]] = [
+    args = [
         "-u", params.username,
-        "-p", params.password,  # Tuple for password store
+        "-p", params.password.unsafe(),  # Extract password from Secret
     ]
 
     # Optional parameters
@@ -257,7 +266,7 @@ host_config.macros                         # Custom macros
 ### Basic Ruleset
 
 ```python
-# File: ~/local/lib/python3/cmk_addons/plugins/my_plugin/rulesets/special_agent.py
+# File: ~/local/lib/python3/cmk_addons/plugins/my_plugin/rulesets/my_plugin.py
 
 from cmk.rulesets.v1 import Title, Help, Label
 from cmk.rulesets.v1.form_specs import (
@@ -518,19 +527,20 @@ if __name__ == "__main__":
     sys.exit(main())
 ```
 
-### 2. Server-Side Calls (server_side_calls/special_agent.py)
+### 2. Server-Side Calls (server_side_calls/my_plugin.py)
 
 ```python
 from collections.abc import Iterator
 from pydantic import BaseModel
 from cmk.server_side_calls.v1 import (
     HostConfig,
+    Secret,
     SpecialAgentCommand,
     SpecialAgentConfig,
 )
 
 class Params(BaseModel):
-    api_key: tuple[str, str]
+    api_key: Secret
     location: str
     units: str = "metric"
 
@@ -539,7 +549,7 @@ def commands_function(
     host_config: HostConfig,
 ) -> Iterator[SpecialAgentCommand]:
     yield SpecialAgentCommand(command_arguments=[
-        "-k", params.api_key,
+        "-k", params.api_key.unsafe(),
         "-l", params.location,
         "--units", params.units,
         host_config.primary_ip_config.address or "api.weather.com",
@@ -554,7 +564,7 @@ special_agent_acme_weather = SpecialAgentConfig(
 )
 ```
 
-### 3. Ruleset (rulesets/special_agent.py)
+### 3. Ruleset (rulesets/my_plugin.py)
 
 ```python
 from cmk.rulesets.v1 import Title, Help
@@ -818,18 +828,20 @@ local/share/check_mk/web/plugins/wato/my_plugin.py  # GUI
 ### New Structure (CheckMK 2.3+)
 ```
 local/lib/python3/cmk_addons/plugins/my_plugin/
+├── __init__.py
 ├── libexec/agent_my_plugin
-├── server_side_calls/special_agent.py
-├── rulesets/special_agent.py
+├── server_side_calls/my_plugin.py
+├── rulesets/my_plugin.py
 └── agent_based/my_plugin.py
 ```
 
 ### Migration Steps
-1. Move agent to `libexec/agent_<name>`
-2. Create `server_side_calls/special_agent.py` from old `special_agent_info`
-3. Convert WATO ruleset to `rulesets/special_agent.py`
-4. Update check plugin imports (v1 → v2)
-5. Test thoroughly
+1. Create `__init__.py` package marker
+2. Move agent to `libexec/agent_<name>`
+3. Create `server_side_calls/<name>.py` from old `special_agent_info`
+4. Convert WATO ruleset to `rulesets/<name>.py`
+5. Update check plugin imports (v1 → v2)
+6. Test thoroughly
 
 ---
 

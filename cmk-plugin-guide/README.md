@@ -127,13 +127,21 @@
 - Real-world migration examples
 - Plugin author workflow for metric updates
 
+### 14-notifications.md (~700 lines)
+- Notification plugin architecture
+- Self-contained vs modular approaches
+- Environment variables reference
+- Complete Discord/webhook examples
+- Error handling and retry patterns
+- Testing notification plugins
+
 ---
 
 ## 📊 Documentation Status
 
-**All 14 core documentation files are complete!** (00-13 plus README)
+**All 15 core documentation files are complete!** (00-14 plus README)
 
-Total: ~5,000 lines covering all aspects of CheckMK 2.3.x plugin development.
+Total: ~5,700 lines covering all aspects of CheckMK 2.3.x plugin development.
 
 ## Benefits Achieved
 
@@ -209,4 +217,5 @@ The modular structure allows for:
 - SNMP device monitoring? → [02-snmp-plugins.md](02-snmp-plugins.md)
 - Agent-based monitoring? → [03-agent-plugins.md](03-agent-plugins.md)
 - REST API/Cloud monitoring? → [12-special-agents.md](12-special-agents.md)
+- Custom alert integrations? → [14-notifications.md](14-notifications.md)
 - Need to rename metrics? → [13-metric-migration.md](13-metric-migration.md)

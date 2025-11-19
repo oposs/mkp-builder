@@ -20,8 +20,9 @@ package.mkp (gzip compressed)
 ├── info                    # Python dict with package metadata
 ├── info.json              # JSON version of metadata
 ├── agents.tar             # Agent plugins and scripts
-├── cmk_addons_plugins.tar # Checkmk addon plugins
-└── lib.tar                # Library files (bakery plugins)
+├── cmk_addons_plugins.tar # CheckMK addon plugins
+├── lib.tar                # Library files (bakery plugins)
+└── notifications.tar      # Notification scripts
 ```
 
 ## Component Details
@@ -43,7 +44,8 @@ package.mkp (gzip compressed)
             'rulesets/plugin_name.py',
             'rulesets/plugin_name_bakery.py'
         ],
-        'lib': ['check_mk/base/cee/plugins/bakery/plugin_name.py']
+        'lib': ['check_mk/base/cee/plugins/bakery/plugin_name.py'],
+        'notifications': ['notification_script.py']
     },
     'name': 'plugin_name',
     'title': 'Human Readable Title',
@@ -108,6 +110,16 @@ check_mk/base/cee/plugins/bakery/
 
 **Installation Path**: `~SITE/local/lib/python3/`
 
+### 5. Notification Scripts (`notifications.tar`)
+
+Contains notification scripts for alerting integrations:
+
+```
+notification_script.py        # Notification plugin script
+```
+
+**Installation Path**: `~SITE/local/share/check_mk/notifications/`
+
 ## Directory Structure Requirements
 
 Your source project should follow this structure:
@@ -126,8 +138,11 @@ project_root/
 │   │               ├── checkman/
 │   │               ├── graphing/
 │   │               └── rulesets/
-│   └── share/check_mk/agents/plugins/
-│       └── plugin_name
+│   └── share/check_mk/
+│       ├── agents/plugins/
+│       │   └── plugin_name
+│       └── notifications/
+│           └── notification_script.py
 ├── .mkp-builder.ini      # Package configuration
 ```
 
@@ -151,16 +166,19 @@ a symlink to `python3/cmk`.
    # Create agents.tar
    tar -cf agents.tar -C local/share/check_mk/agents plugins/
 
-   # Create cmk_addons_plugins.tar  
+   # Create cmk_addons_plugins.tar
    tar -cf cmk_addons_plugins.tar -C local/lib/python3/cmk_addons/plugins .
 
    # Create lib.tar
    tar -cf lib.tar -C local/lib/python3 check_mk/
+
+   # Create notifications.tar
+   tar -cf notifications.tar -C local/share/check_mk/notifications .
    ```
 
 3. **Package final MKP**:
    ```bash
-   tar -czf package_name-version.mkp info info.json agents.tar cmk_addons_plugins.tar lib.tar
+   tar -czf package_name-version.mkp info info.json agents.tar cmk_addons_plugins.tar lib.tar notifications.tar
    ```
 
 ### 2. Automated Build Script
@@ -208,10 +226,15 @@ The build process automatically maps files from your local directory structure:
 - Target: `PACKAGE_NAME/*` and flat structure in cmk_addons_plugins.tar
 - Pattern: Recursive inclusion of all Python files and documentation
 
-### Library Mapping  
+### Library Mapping
 - Source: `local/lib/python3/cmk/base/cee/plugins/bakery/PACKAGE_NAME.py`
 - Target: `check_mk/base/cee/plugins/bakery/PACKAGE_NAME.py` in lib.tar
 - Pattern: Bakery plugin files only
+
+### Notification Mapping
+- Source: `local/share/check_mk/notifications/*`
+- Target: notification files in notifications.tar
+- Pattern: All notification script files
 
 ## Version Management
 
@@ -332,8 +355,9 @@ tar -tzf package.mkp
 
 # Validate tar files
 tar -tf agents.tar
-tar -tf cmk_addons_plugins.tar  
+tar -tf cmk_addons_plugins.tar
 tar -tf lib.tar
+tar -tf notifications.tar
 
 # Check Python syntax
 python3 -m py_compile file.py

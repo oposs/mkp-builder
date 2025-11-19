@@ -158,6 +158,43 @@ def test_snmp_detection():
     assert oid_responses.get(".1.3.6.1.4.1.318.1.1.1.1.1.1.0") is not None
 ```
 
+### Using Checkmk Debug Mode
+
+```python
+from cmk.ccc import debug
+
+def parse_my_service(string_table):
+    """Parse with conditional debug output"""
+    if debug.enabled():
+        print(f"DEBUG: Parsing {len(string_table)} lines")
+        print(f"DEBUG: Data: {string_table}")
+
+    parsed = {}
+    for line in string_table:
+        # Parse logic here
+        pass
+
+    if debug.enabled():
+        print(f"DEBUG: Parsed result: {parsed}")
+
+    return parsed
+
+def check_my_service(item, section):
+    """Check with conditional debug output"""
+    if debug.enabled():
+        print(f"DEBUG: Checking item: {item}")
+        print(f"DEBUG: Section data: {section}")
+
+    # Check logic here
+    yield Result(state=State.OK, summary="Status OK")
+```
+
+**Important Notes:**
+- In Checkmk 2.4.0+, the debug module moved from `cmk.utils.debug` to `cmk.ccc.debug`
+- Debug output is only shown when running with `--debug` flag (e.g., `cmk -II --debug hostname`)
+- Debug statements are automatically filtered out in production
+- Use `debug.enabled()` to check if debug mode is active before printing
+
 ### Debugging with Logging
 
 ```python

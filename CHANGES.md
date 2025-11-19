@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+- Add notification plugin support to mkp-builder (collects from `local/share/check_mk/notifications/`, creates `notifications.tar`)
+- Add notification plugin development guide (14-notifications.md) covering Discord/webhook examples, environment variables, testing
 
 ### Changed
 

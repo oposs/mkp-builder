@@ -217,6 +217,7 @@ class MKPBuilder:
             'agents': [],
             'cmk_addons_plugins': [],
             'lib': [],
+            'notifications': [],
         }
         
         package_name = self.config['name']
@@ -281,7 +282,15 @@ class MKPBuilder:
                     # Ensure paths always use check_mk prefix for MKP compatibility
                     lib_path = f"{path_prefix}/{rel_path}"
                     files['lib'].append(lib_path)
-        
+
+        # Collect notification files
+        notifications_dir = self.work_dir / 'local' / 'share' / 'check_mk' / 'notifications'
+        if notifications_dir.exists():
+            for file_path in notifications_dir.rglob('*'):
+                if file_path.is_file() and '__pycache__' not in file_path.parts:
+                    rel_path = file_path.relative_to(notifications_dir)
+                    files['notifications'].append(str(rel_path))
+
         return files
     
     def create_tar_file(self, base_dir: Path, tar_path: Path, files: List[str]) -> None:
@@ -324,15 +333,20 @@ class MKPBuilder:
         self.logger.info("Creating agents.tar...")
         agents_base = self.work_dir / 'local' / 'share' / 'check_mk' / 'agents'
         self.create_tar_file(agents_base, build_dir / 'agents.tar', files['agents'])
-        
+
         # Create cmk_addons_plugins.tar
         self.logger.info("Creating cmk_addons_plugins.tar...")
         addons_base = self.work_dir / 'local' / 'lib' / 'python3' / 'cmk_addons' / 'plugins'
         self.create_tar_file(addons_base, build_dir / 'cmk_addons_plugins.tar', files['cmk_addons_plugins'])
-        
+
         # Create lib.tar
         self.logger.info("Creating lib.tar...")
         self.create_lib_tar(build_dir / 'lib.tar', files['lib'])
+
+        # Create notifications.tar
+        self.logger.info("Creating notifications.tar...")
+        notifications_base = self.work_dir / 'local' / 'share' / 'check_mk' / 'notifications'
+        self.create_tar_file(notifications_base, build_dir / 'notifications.tar', files['notifications'])
     
     def generate_metadata(self, build_dir: Path, files: Dict[str, List[str]]) -> None:
         """Generate metadata files (info and info.json)"""
@@ -374,7 +388,7 @@ class MKPBuilder:
         
         # Create the final MKP package
         with tarfile.open(output_file, 'w:gz') as tar:
-            for file_name in ['info', 'info.json', 'agents.tar', 'cmk_addons_plugins.tar', 'lib.tar']:
+            for file_name in ['info', 'info.json', 'agents.tar', 'cmk_addons_plugins.tar', 'lib.tar', 'notifications.tar']:
                 file_path = build_dir / file_name
                 if file_path.exists():
                     tar.add(file_path, arcname=file_name)

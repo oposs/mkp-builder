@@ -165,8 +165,11 @@ repository/
 │   │   │           └── your_plugin_bakery.py
 │   │   └── cmk/base/cee/plugins/bakery/
 │   │       └── your_plugin.py
-│   └── share/check_mk/agents/plugins/
-│       └── your_plugin
+│   └── share/check_mk/
+│       ├── agents/plugins/
+│       │   └── your_plugin
+│       └── notifications/
+│           └── your_notification.py
 ├── .mkp-builder.ini          # Optional config file
 └── .github/workflows/
     └── build.yml
@@ -271,8 +274,9 @@ package.mkp (tar file, gzip compressed)
 ├── info                    # Python dict with package metadata
 ├── info.json              # JSON version of metadata
 ├── agents.tar             # Agent plugins and scripts
-├── cmk_addons_plugins.tar # Checkmk addon plugins
-└── lib.tar                # Library files (bakery plugins)
+├── cmk_addons_plugins.tar # CheckMK addon plugins
+├── lib.tar                # Library files (bakery plugins)
+└── notifications.tar      # Notification scripts
 ```
 
 ## Supported Checkmk Versions
@@ -294,6 +298,10 @@ The action automatically maps files from your local directory structure:
 ### Library Files
 - Source: `local/lib/python3/cmk/base/cee/plugins/bakery/PACKAGE_NAME.py`
 - Target: `cmk/base/cee/plugins/bakery/PACKAGE_NAME.py` in lib.tar
+
+### Notification Scripts
+- Source: `local/share/check_mk/notifications/*`
+- Target: notification files in notifications.tar
 
 ## Troubleshooting
 
