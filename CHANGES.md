@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New
 - Add notification plugin support to mkp-builder (collects from `local/share/check_mk/notifications/`, creates `notifications.tar`)
 - Add Claude Code plugin with Checkmk 2.3.x plugin development skill (`skills/checkmk-plugin/`)
-- Install via `/install-plugin https://github.com/oposs/mkp-builder` in Claude Code
+- Install via OPOSS marketplace: `/plugin marketplace add oposs/claude-plugins` then `/plugin install cmk-oposs-plugin@oposs-plugins`
 
 ### Changed
 - Move plugin development guide from `cmk-plugin-guide/` into `skills/checkmk-plugin/references/`

@@ -27,8 +27,11 @@ or package Checkmk plugins.
 
 ### Install
 
+Add the OPOSS marketplace and install the plugin:
+
 ```
-/install-plugin https://github.com/oposs/mkp-builder
+/plugin marketplace add oposs/claude-plugins
+/plugin install cmk-oposs-plugin@oposs-plugins
 ```
 
 ### What it covers
