@@ -5,8 +5,6 @@
 
 > **⚠️ Disclaimer**: This is an independent, community-developed tool and is **not officially affiliated with or endorsed by Checkmk GmbH**. This project was developed by reverse-engineering existing MKP package formats and studying Checkmk documentation. Any issues, bugs, or incompatibilities are our responsibility and should be reported to this project's issue tracker, not to Checkmk support.
 
-> **📚 Plugin Development Guide**: Since many users of mkp-builder are developing Checkmk plugins, we maintain comprehensive modular documentation for Checkmk 2.3.x plugin development in [`cmk-plugin-guide/`](cmk-plugin-guide/). The guide covers agent plugins, SNMP plugins, special agents, check plugins, rulesets, graphing, bakery integration, and metric migration with practical examples and best practices. Start with the [guide index](cmk-plugin-guide/00-index.md) or read the [guide overview](cmk-plugin-guide/README.md).
-
 > **🚨 Breaking Changes in v2.0.0**: If you're upgrading from v1.x, please note that v2.0.0 introduces breaking changes. The configuration file format has changed from `.mkp-builderrc` to `.mkp-builder.ini` with INI format syntax. GitHub Action input names have also been updated. See the [changelog](CHANGES.md) for full migration details.
 
 A reusable GitHub Action for building Checkmk MKP (Monitoring Konfiguration Package) files from local directory structures.
@@ -19,6 +17,37 @@ A reusable GitHub Action for building Checkmk MKP (Monitoring Konfiguration Pack
 - 📦 **Artifact Ready**: Outputs package information for easy artifact upload
 - 🧹 **Clean**: No permanent changes to your repository
 - ⚡ **Fast**: Downloads build tools on-demand, no bloated containers
+
+## Claude Code Plugin: Checkmk Plugin Development Guide
+
+This repo includes a comprehensive Checkmk 2.3.x plugin development guide
+as a [Claude Code](https://claude.com/claude-code) skill. Once installed,
+Claude will automatically use the guide whenever you ask it to build, upgrade,
+or package Checkmk plugins.
+
+### Install
+
+```
+/install-plugin https://github.com/oposs/mkp-builder
+```
+
+### What it covers
+
+- Agent-based check plugins, SNMP plugins, special agents
+- Metrics, graphing, and perfometers
+- Rulesets and GUI configuration
+- Bakery integration for automatic agent deployment
+- Notification plugins (Slack, Teams, webhooks, etc.)
+- Metric migration (renaming metrics while preserving RRD history)
+- MKP packaging with the `oposs/mkp-builder` GitHub Action
+
+### Example prompts
+
+- *"Build an SNMP plugin to monitor my Liebert UPS"*
+- *"Upgrade my old v1 check plugin to the v2 API"*
+- *"Create a notification plugin that sends alerts to Teams"*
+- *"Add graphs and configurable thresholds to my plugin"*
+- *"Package my plugin as an MKP with a GitHub Actions release workflow"*
 
 ## Quick Start
 

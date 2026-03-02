@@ -1,0 +1,23 @@
+{
+  "skill_name": "checkmk-plugin",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I need to monitor a Liebert UPS via SNMP with Checkmk. It exposes battery charge percentage at OID .1.3.6.1.4.1.476.1.42.3.4.1.3.3.1.3, input voltage at .1.3.6.1.4.1.476.1.42.3.5.1.1.1.3, and output load percentage at .1.3.6.1.4.1.476.1.42.3.5.3.1.1.3. I want warn/crit thresholds configurable in the GUI. My company prefix is 'oetiker'. Build all the files I need including an MKP builder config.",
+      "expected_output": "Complete SNMP check plugin with: SimpleSNMPSection with correct OIDs and detection, CheckPlugin with check_levels, graphing definitions with prefixed metrics (oetiker_liebert_ups_*), ruleset with SimpleLevels and correct condition type, .mkp-builder.ini, correct directory structure, and correct entry-point prefixes.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "I have an old Checkmk check plugin that uses the v1 API (cmk.agent_based.v1). It monitors disk I/O rates and yields metrics named 'read_ops', 'write_ops', and 'latency_ms' (stored in milliseconds). The section variable is named 'diskio_section' (without the agent_section_ prefix). I need to upgrade it to the v2 API, fix all naming conventions, and preserve historical metric data. My company is 'acme' and the plugin is called 'diskio'.",
+      "expected_output": "Upgraded plugin with: v2 API imports, agent_section_acme_diskio prefix, prefixed metrics (acme_diskio_read_ops, etc.), latency converted to seconds, metric translation file with RenameTo and ScaleBy to preserve history, correct directory structure.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Build me a Checkmk notification plugin that sends alerts to a Microsoft Teams webhook URL. It should include the host name, service name, state (OK/WARN/CRIT/UNKNOWN), plugin output, and a timestamp. Use the incoming webhook format. My org is 'mycompany'. Include the MKP builder config and GitHub Actions workflow.",
+      "expected_output": "Notification script using NOTIFY_* environment variables, proper exit codes (0/1/2), urllib.request for HTTP POST, Teams webhook JSON format, timeout handling, .mkp-builder.ini, GitHub Actions workflow with oposs/mkp-builder@v2, correct directory structure under local/share/check_mk/notifications/.",
+      "files": []
+    }
+  ]
+}

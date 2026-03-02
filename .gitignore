@@ -7,7 +7,7 @@
 !/.github
 !/.mkp-builder.ini.example
 !/.clinerules
-!/cmk-plugin-guide 
+!/skills
 *~
 *.swp
 *.bak
