@@ -219,7 +219,7 @@ def _form_spec_temperature():
 
 rule_spec_temperature_monitor = CheckParameters(
     title=Title("Temperature Monitoring"),
-    topic=Topic.ENVIRONMENT,
+    topic=Topic.ENVIRONMENTAL,
     name="temperature_monitor",
     parameter_form=_form_spec_temperature,
     condition=HostAndItemCondition(

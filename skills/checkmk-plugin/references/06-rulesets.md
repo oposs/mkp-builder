@@ -393,10 +393,10 @@ Topic.APPLICATIONS      # Application monitoring
 Topic.DATABASES         # Database systems
 Topic.STORAGE           # Storage and filesystems
 Topic.NETWORKING        # Network monitoring
-Topic.POWER            # Power and UPS
-Topic.ENVIRONMENT      # Environmental monitoring
-Topic.OPERATING_SYSTEM # OS monitoring
-Topic.HARDWARE         # Hardware monitoring
+Topic.POWER             # Power and UPS
+Topic.ENVIRONMENTAL     # Environmental monitoring
+Topic.OPERATING_SYSTEM  # OS monitoring
+Topic.HARDWARE          # Hardware monitoring
 ```
 
 ### Validation
