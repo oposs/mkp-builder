@@ -2,6 +2,8 @@
 
 > **Prerequisites**: Understand CheckMK naming conventions first! See **[01-quickstart.md](01-quickstart.md#naming-conventions-critical)** for why proper metric naming matters.
 
+> **Note for migrations across renamed checks**: if the *check command name itself* changed (not just the metric name) when you ported the plugin to a new namespace — e.g. legacy `huawei_ups_*` → new `oposs_huawei_ups_*` — see **[Renaming the check command itself](#renaming-the-check-command-itself)** below. The obvious-looking choice (keying `check_commands` on the legacy name) fails silently. This is the single most common bug in migration translation files.
+
 ## Quick Reference: Rename Metrics While Preserving History
 
 ### Core Concept
@@ -20,6 +22,8 @@ Checkmk's Translation system allows metric renaming without data loss. RRD files
 ### 1. Create Translation File
 
 **Location:** `cmk/plugins/<your_plugin>/graphing/translations.py`
+
+> **`check_commands` MUST list the *current* (post-upgrade) check command — the one Checkmk sees on the live service today.** Checkmk's translation lookup (`cmk/gui/graphing/_translated_metrics.py`, `lookup_metric_translations_for_check_command`) is a plain dict lookup on the service's current command. If you key the translation on the *legacy* command (the one no service runs anymore because the old plugin was uninstalled), the lookup misses and the rename never fires — even though the legacy RRD files still sit in the per-service directory. The translation `name=` field is just a label and can be anything; only `check_commands` drives lookup. See **[Renaming the check command itself](#renaming-the-check-command-itself)** for the migration case.
 
 **Template:**
 ```python
@@ -166,8 +170,9 @@ After creating translation:
 1. ✅ Object name starts with `translation_`
 2. ✅ File placed in `cmk/plugins/<plugin>/graphing/translations.py`
 3. ✅ Imported: `from cmk.graphing.v1 import translations`
-4. ✅ Check command name matches your check plugin name
-5. ✅ Scale factors are correct (test: old_value × scale = new_value)
+4. ✅ `check_commands` references the **new/current** check command (the one a live service has today), **not** the legacy one if the check name was also renamed during a plugin migration
+5. ✅ Service name in the new plugin matches the service name in the legacy plugin — otherwise the legacy RRD file sits in a different per-service directory and translations cannot bridge them
+6. ✅ Scale factors are correct (test: old_value × scale = new_value)
 
 **Testing:**
 ```bash
@@ -187,8 +192,9 @@ cmk -vv --list-graphing-plugins | grep translation_<your_name>
 
 ## How It Works (Brief)
 
+0. **Per-service lookup gate**: For each live service, Checkmk takes the service's *current* check command and looks up registered translations in the `check_metrics` dict via an exact dict-key match. Translations registered against any other key — including a now-uninstalled legacy command — never fire for that service. This is the gate every translation must pass before any of the steps below run.
 1. **Collection**: Check outputs metric (old or new name) → RRD stores with original name
-2. **Translation Load**: At startup, translations registered to `check_metrics` dict
+2. **Translation Load**: At startup, translations registered to `check_metrics` dict (key = check command string)
 3. **Retrieval**: When graphing metric "new_name":
    - Reverse translate: find all old names mapping to "new_name"
    - Query ALL relevant RRD datasources (old + new)
@@ -196,7 +202,7 @@ cmk -vv --list-graphing-plugins | grep translation_<your_name>
    - Apply scaling to each value
 4. **Result**: Seamless graph showing all historical data
 
-**Key Insight:** RRD files never renamed. Translation is query-time mapping only.
+**Key Insight:** RRD files never renamed. Translation is query-time mapping only — and it only happens for services whose current check command matches a registered translation key.
 
 ---
 
@@ -281,6 +287,54 @@ This ensures users upgrading from v1.0 see their historical data merged with new
 
 ---
 
+## Renaming the check command itself
+
+The "Plugin Author Use Case" above assumes the check command name stays the same across versions and only the metric name inside it changes. The harder case — and the one most people get wrong — is when **both** change at once. This is typical for migrations where an older plugin gets ported into a new namespace (e.g. legacy `acme_ups_*` checks → new `myorg_acme_ups_*` checks).
+
+### The rule
+
+`check_commands` lists check commands the translation should *fire on*. Checkmk does an exact dict-key match against the **live service's current check command**. After the legacy plugin is uninstalled, no service has the legacy command attached anymore. So an entry keyed on the legacy command never matches anything and is effectively dead code — even though it loads cleanly and looks correct.
+
+**Always reference the new (post-upgrade) check command in `check_commands`.** The rename rule on the right (`{"<old metric>": RenameTo("<new metric>")}`) is independent: it describes how to alias an old RRD column onto the new metric, and it stays the same regardless of which command you key on.
+
+### Worked example
+
+```python
+# OLD plugin (v1):    check command = check_mk-acme_ups_battery_temperature
+#                     metric name   = temperature                    (generic)
+# NEW plugin (v2):    check command = check_mk-myorg_acme_ups_battery_temperature
+#                     metric name   = myorg_acme_battery_temperature (prefixed)
+# Service name unchanged ("Battery Temperature") — so the per-service RRD
+# directory contains BOTH temperature.rrd (legacy) and
+# myorg_acme_battery_temperature.rrd (new).
+
+translation_myorg_acme_ups_battery_temperature = translations.Translation(
+    name="myorg_acme_ups_battery_temperature",
+    # Reference the NEW check command — that's what live services have today.
+    check_commands=[translations.PassiveCheck("myorg_acme_ups_battery_temperature")],
+    translations={
+        # Old metric name -> new metric name. The translation engine pulls
+        # the legacy *.rrd from the same service directory and aliases it
+        # onto the new metric in the graph.
+        "temperature": translations.RenameTo("myorg_acme_battery_temperature"),
+    },
+)
+```
+
+### What if the service name also changed?
+
+Then you're out of luck for an automatic merge. Checkmk stores RRDs per service (using the service name in the directory path), so a renamed service has its legacy RRD in a *different* directory than the new service's RRD. The translation system has no way to bridge across directories. Options:
+
+- Live with the gap (legacy data exists but isn't graphed alongside new data).
+- Migrate the RRD files by hand (rename the directory before the new service is discovered) — outside the scope of this guide.
+- Keep the service name stable across the rename in the first place (recommended when planning a migration).
+
+### Common symptom of getting it wrong
+
+Plugin loads cleanly. New graphs render with only post-upgrade data. Legacy `*.rrd` files are visible on disk in the right directory but invisible in the GUI. No errors anywhere. → You probably keyed `check_commands` on the legacy command.
+
+---
+
 ## Important Notes
 
 - **No data migration needed** - old RRD files stay in place
@@ -360,6 +414,9 @@ translation_plugin2 = translations.Translation(
 ---
 
 ## Common Pitfalls
+
+❌ **Wrong**: `check_commands=[PassiveCheck("legacy_check_name")]` when the check command was renamed in the new plugin (silent dead-code; lookup misses for every live service)
+✅ **Right**: `check_commands=[PassiveCheck("new_check_name")]` — reference the post-upgrade command. The translation engine looks up by the live service's *current* command, not the historical one. See **[Renaming the check command itself](#renaming-the-check-command-itself)**.
 
 ❌ **Wrong**: Manually renaming RRD files
 ✅ **Right**: Create Translation entry
