@@ -8,8 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+- Ship the release/CI workflows as copyable skill artifacts under
+  `skills/checkmk-plugin/assets/` (`release.yml`, `validate.yml`,
+  `CHANGES.md.template`) so plugin repos bootstrap CI with a `cp`, and the skill
+  docs stay light instead of inlining ~250 lines of YAML.
 
 ### Changed
+- Document the `workflow_dispatch` + `CHANGES.md` release pipeline as the
+  recommended default in the checkmk-plugin skill (SKILL.md and
+  `references/mkp-builder.md`); keep the minimal tag-push workflow as a short
+  alternative. Reference the bundled artifacts instead of inlining them.
+- Bump GitHub Actions in the shipped templates to current majors:
+  `actions/checkout` v4→v7, `actions/upload-artifact` v4→v7,
+  `actions/download-artifact` v4→v8, `softprops/action-gh-release` v2→v3
+  (`oposs/mkp-builder` stays `@v2`).
 
 ### Fixed
 
