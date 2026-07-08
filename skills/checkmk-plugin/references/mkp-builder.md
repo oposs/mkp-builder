@@ -49,7 +49,7 @@ repository/
 |       \-- notifications/
 |           \-- your_notification.py
 +-- .mkp-builder.ini
-\-- .github/workflows/build.yml
+\-- .github/workflows/release.yml
 ```
 
 ## GitHub Action Usage
@@ -106,7 +106,43 @@ repository/
 | `package-name` | Name of the built package |
 | `package-size` | Size of the package |
 
-## Complete Release Workflow
+## Complete Release Workflow (recommended)
+
+Don't hand-write the release YAML — ship the maintained template. Copy the bundled
+artifacts into the plugin repo:
+
+```bash
+cp <skill-dir>/assets/release.yml         .github/workflows/release.yml
+cp <skill-dir>/assets/CHANGES.md.template CHANGES.md   # only if no CHANGES.md exists yet
+```
+
+`assets/release.yml` is a **manual `workflow_dispatch`** pipeline (not tag-triggered). How
+it works:
+
+1. You run it from the Actions UI and choose a release type: `bugfix` (x.y.**Z**),
+   `feature` (x.**Y**.0), or `major` (**X**.0.0).
+2. It enforces `main`, computes the next semver from the latest `v*` git tag.
+3. It rolls the `CHANGES.md` `## [Unreleased]` section into a dated `## X.Y.Z - DATE`
+   section, commits that, and creates + pushes the annotated tag.
+4. It builds the MKP with `oposs/mkp-builder@v2` and publishes a GitHub Release whose body
+   is the extracted changelog section, with the `.mkp` attached.
+
+It is **repo-agnostic**: package name and Checkmk version bounds come from
+`.mkp-builder.ini`, release notes come from `CHANGES.md`. No per-repo edits to the workflow
+are needed — the only per-repo maintenance is adding entries under `## [Unreleased]` in
+`CHANGES.md` as you work (New / Changed / Fixed).
+
+Requirements: the repo must have `.mkp-builder.ini`, a `CHANGES.md` in the template format,
+and `permissions: contents: write` (already set in the template). Releases are cut by a
+human triggering the workflow, so version bumps are deliberate.
+
+> Bootstrapping only: if you are working on an existing plugin that already has a release
+> workflow, you do not need to copy or read any of this.
+
+### Minimal alternative (tag-triggered)
+
+If you prefer to cut releases by pushing a tag yourself and don't want a `CHANGES.md`, this
+one-job workflow builds and releases on any `v*` tag:
 
 ```yaml
 name: Release
@@ -117,21 +153,18 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@v7
       - name: Extract version
         id: version
         run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-
       - name: Build MKP
         id: build
         uses: oposs/mkp-builder@v2
         with:
           version: ${{ steps.version.outputs.version }}
           verbose: 'true'
-
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ${{ steps.build.outputs.package-file }}
           generate_release_notes: true
@@ -139,23 +172,15 @@ jobs:
 
 ## Validation Workflow (PRs)
 
-```yaml
-name: Validate
-on:
-  pull_request:
-    branches: [main]
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Test build
-        uses: oposs/mkp-builder@v2
-        with:
-          version: '0.0.0-test'
-          validate-python: 'true'
-          verbose: 'true'
+Optional: validate that the package still builds on every pull request. Copy the bundled
+template:
+
+```bash
+cp <skill-dir>/assets/validate.yml .github/workflows/validate.yml
 ```
+
+It runs `oposs/mkp-builder@v2` with `version: '0.0.0-test'` and `validate-python: 'true'`
+on PRs to `main`, so a broken package fails the check before merge.
 
 ## MKP Package Format
 

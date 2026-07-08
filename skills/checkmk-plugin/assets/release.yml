@@ -1,0 +1,340 @@
+name: Build and Release
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'bugfix'
+        type: choice
+        options:
+          - bugfix   # Increment patch (x.y.Z)
+          - feature  # Increment minor (x.Y.0)
+          - major    # Increment major (X.0.0)
+
+permissions:
+  contents: write
+
+jobs:
+  # Check if we're on the main branch
+  check-branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Check branch
+        run: |
+          echo "::group::Branch verification"
+          CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [[ "$CURRENT_BRANCH" != "main" ]]; then
+            echo "::error title=Wrong Branch::Release can only be run from the main branch. Current branch: $CURRENT_BRANCH"
+            echo "::notice::Please switch to the main branch and try again."
+            echo "Release attempted from non-main branch: $CURRENT_BRANCH" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
+          echo "::notice title=Branch Check Passed::Running on main branch, proceeding with release."
+          echo "✅ Branch verification passed - running on main branch" >> $GITHUB_STEP_SUMMARY
+          echo "::endgroup::"
+
+  create-tag:
+    runs-on: ubuntu-latest
+    needs: check-branch
+    outputs:
+      version: ${{ steps.generate_version.outputs.version }}
+      version_no_v: ${{ steps.generate_version.outputs.version_no_v }}
+      release_date: ${{ steps.generate_version.outputs.release_date }}
+    steps:
+      - name: Checkout code with history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Generate new version
+        id: generate_version
+        run: |
+          set -euo pipefail
+          echo "::group::Version generation"
+          # Get the latest tag from git
+          git fetch --tags
+          LATEST_TAG=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Parse the latest tag to get major, minor, and patch
+          MAJOR=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\1/')
+          MINOR=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\2/')
+          PATCH=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\3/')
+
+          echo "Current version: $MAJOR.$MINOR.$PATCH"
+
+          # Increment based on release type
+          case "${{ github.event.inputs.release_type }}" in
+            major)
+              MAJOR=$((MAJOR+1))
+              MINOR=0
+              PATCH=0
+              ;;
+            feature)
+              MINOR=$((MINOR+1))
+              PATCH=0
+              ;;
+            bugfix)
+              PATCH=$((PATCH+1))
+              ;;
+          esac
+
+          # Generate new version
+          NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
+          echo "::notice title=New Version::New version will be: $NEW_VERSION (from $LATEST_TAG)"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          # Also create a version without the v prefix for CHANGES.md
+          echo "version_no_v=$MAJOR.$MINOR.$PATCH" >> $GITHUB_OUTPUT
+
+          # Get current date in YYYY-MM-DD format
+          RELEASE_DATE=$(date +%Y-%m-%d)
+          echo "release_date=$RELEASE_DATE" >> $GITHUB_OUTPUT
+
+          # Add version info to job summary
+          echo "## Version Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous version:** $LATEST_TAG" >> $GITHUB_STEP_SUMMARY
+          echo "- **New version:** $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release date:** $RELEASE_DATE" >> $GITHUB_STEP_SUMMARY
+
+          echo "::endgroup::"
+
+      - name: Update CHANGES.md
+        env:
+          VERSION_NO_V: ${{ steps.generate_version.outputs.version_no_v }}
+          RELEASE_DATE: ${{ steps.generate_version.outputs.release_date }}
+        run: |
+          set -euo pipefail
+          echo "::group::Updating CHANGES.md"
+
+          # Use Perl to update CHANGES.md
+          perl -i -e '
+            use strict;
+            use warnings;
+
+            # Read the file content
+            my $content = do { local $/; <> };
+
+            # Extract the Unreleased section
+            my ($before, $unreleased_section, $after) =
+              $content =~ /^(.*?)(## \[Unreleased\].*?)(?=^## \d|\Z)(.*)/ms;
+
+            # Initialize variables for sections
+            my $has_new = 0;
+            my $has_changed = 0;
+            my $has_fixed = 0;
+            my $new_content = "";
+            my $changed_content = "";
+            my $fixed_content = "";
+
+            # Extract content for each section if it exists
+            if ($unreleased_section =~ /### New(.*?)(?=^###|\Z)/ms) {
+              my $section = $1;
+              $section =~ s/^\s+|\s+$//g;
+              if ($section) {
+                $has_new = 1;
+                $new_content = $section;
+              }
+            }
+
+            if ($unreleased_section =~ /### Changed(.*?)(?=^###|\Z)/ms) {
+              my $section = $1;
+              $section =~ s/^\s+|\s+$//g;
+              if ($section) {
+                $has_changed = 1;
+                $changed_content = $section;
+              }
+            }
+
+            if ($unreleased_section =~ /### Fixed(.*?)(?=^###|\Z)/ms) {
+              my $section = $1;
+              $section =~ s/^\s+|\s+$//g;
+              if ($section) {
+                $has_fixed = 1;
+                $fixed_content = $section;
+              }
+            }
+
+            # Build new Unreleased section
+            my $new_unreleased = "## [Unreleased]\n\n".
+            "### New\n\n### Changed\n\n### Fixed\n\n";
+
+            # Build version section with only non-empty sections
+            my $version_section = "## $ENV{VERSION_NO_V} - $ENV{RELEASE_DATE}\n";
+            if ($has_new) {
+              $version_section .= "### New\n$new_content\n\n";
+            }
+            if ($has_changed) {
+              $version_section .= "### Changed\n$changed_content\n\n";
+            }
+            if ($has_fixed) {
+              $version_section .= "### Fixed\n$fixed_content\n\n";
+            }
+
+            # Put it all together
+            print $before . $new_unreleased . $version_section . $after;
+          ' CHANGES.md
+
+          echo "Updated CHANGES.md for version ${VERSION_NO_V}"
+          echo "::endgroup::"
+
+      - name: Commit and Create tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          echo "::group::Creating tag and pushing changes"
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+
+          VERSION="${{ steps.generate_version.outputs.version }}"
+
+          # Commit CHANGES.md update
+          git add CHANGES.md
+          git commit -m "Update CHANGES.md for release ${VERSION}"
+          echo "::notice title=Commit Created::Created commit with CHANGES.md updates"
+
+          # Create and push tag
+          git tag -a ${VERSION} -m "Release ${VERSION}"
+          echo "::notice title=Tag Created::Created tag ${VERSION}"
+
+          git push origin main
+          git push origin ${VERSION}
+          echo "::notice title=Changes Pushed::Pushed changes and tag to repository"
+          echo "::endgroup::"
+
+  build:
+    needs: create-tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.create-tag.outputs.version }}
+
+      - name: Build MKP Package
+        id: build_package
+        uses: oposs/mkp-builder@v2
+        with:
+          version: ${{ needs.create-tag.outputs.version_no_v }}
+          verbose: 'true'
+
+      - name: Add build info to summary
+        env:
+          VERSION: ${{ needs.create-tag.outputs.version }}
+          PACKAGE_FILE: ${{ steps.build_package.outputs.package-file }}
+          PACKAGE_NAME: ${{ steps.build_package.outputs.package-name }}
+          PACKAGE_SIZE: ${{ steps.build_package.outputs.package-size }}
+        run: |
+          echo "## Build Information" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** ${PACKAGE_FILE}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package Name:** ${PACKAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Size:** ${PACKAGE_SIZE}" >> $GITHUB_STEP_SUMMARY
+
+          # Verify package structure
+          echo "- **Package contents:**" >> $GITHUB_STEP_SUMMARY
+          tar -tzf "${PACKAGE_FILE}" | while read -r file; do
+            echo "  - $file" >> $GITHUB_STEP_SUMMARY
+          done
+
+      - name: Upload MKP artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: mkp-package
+          path: ${{ steps.build_package.outputs.package-file }}
+          retention-days: 90
+
+  create-release:
+    needs: [build, create-tag]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code for release notes
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.create-tag.outputs.version }}
+
+      - name: Download MKP artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: mkp-package
+          path: ./
+
+      - name: List artifacts
+        run: |
+          echo "::group::Listing artifacts"
+          echo "Downloaded MKP files:"
+          ls -la *.mkp
+          echo "::endgroup::"
+
+      - name: Extract release notes
+        id: extract_release_notes
+        run: |
+          set -e
+          echo "::group::Extracting release notes"
+
+          # Extract version number without 'v' prefix for CHANGES.md
+          VERSION_NO_V=$(echo "${{ needs.create-tag.outputs.version }}" | sed 's/^v//')
+          echo "Looking for version: ${VERSION_NO_V}"
+
+          # Use Perl to extract the relevant section - much more reliable than bash/awk
+          perl -e '
+            # Get version from first argument
+            my $version = $ARGV[0];
+
+            # Read the entire CHANGES.md file
+            undef $/;
+            my $content = <STDIN>;
+
+            # Use a regex to find the section for our version
+            if ($content =~ /## \Q$version\E[^\n]*\n(.*?)(?=\n## [0-9]|$)/s) {
+              my $section = $1;
+              # Trim leading/trailing whitespace
+              $section =~ s/^\s+|\s+$//g;
+              print $section;
+            } else {
+              # Not found, create minimal content
+              print "CheckMK MKP package release version $version\n";
+              warn "WARNING: Could not find version $version in CHANGES.md\n";
+            }
+          ' "$VERSION_NO_V" < CHANGES.md > release_notes_final.md
+
+          # Show the result
+          echo "Release notes extracted to release_notes_final.md:"
+          cat release_notes_final.md
+          echo "::endgroup::"
+
+      - name: Set version without v prefix
+        id: set_version_without_v
+        run: |
+          TAG=${{ needs.create-tag.outputs.version }}
+          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.create-tag.outputs.version }}
+          name: Release ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          body_path: release_notes_final.md
+          fail_on_unmatched_files: true
+          files: "*.mkp"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate release summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.create-tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release Date:** ${{ needs.create-tag.outputs.release_date }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release URL:** ${{ steps.create_release.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Release Notes" >> $GITHUB_STEP_SUMMARY
+          cat release_notes_final.md >> $GITHUB_STEP_SUMMARY

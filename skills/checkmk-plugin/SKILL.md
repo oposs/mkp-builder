@@ -62,7 +62,7 @@ your-plugin-repo/
 |       +-- agents/plugins/         # Agent scripts (bash/python, executable)
 |       \-- notifications/          # Notification scripts (executable)
 +-- .mkp-builder.ini                # MKP packaging config
-\-- .github/workflows/build.yml     # CI/CD
+\-- .github/workflows/release.yml     # CI/CD
 ```
 
 **Required symlink** (prevents production path issues):
@@ -301,31 +301,31 @@ validate_python = true
 ```
 
 ### GitHub Actions workflow
-```yaml
-name: Build MKP
-on:
-  push:
-    tags: ['v*']
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Extract version
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - name: Build MKP
-        id: build
-        uses: oposs/mkp-builder@v2
-        with:
-          version: ${{ steps.version.outputs.version }}
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ${{ steps.build.outputs.package-file }}
+
+Ship the ready-made release pipeline instead of hand-writing YAML — copy the bundled
+artifacts into the plugin repo:
+
+```bash
+cp <skill-dir>/assets/release.yml       .github/workflows/release.yml
+cp <skill-dir>/assets/CHANGES.md.template CHANGES.md   # only if the repo has no CHANGES.md yet
+cp <skill-dir>/assets/validate.yml      .github/workflows/validate.yml   # optional: build-check PRs
 ```
 
-Read `references/mkp-builder.md` for the full MKP builder reference including advanced workflows, outputs, troubleshooting, and MKP format details.
+`assets/release.yml` is the recommended **manual `workflow_dispatch`** release: you pick
+`bugfix`/`feature`/`major` in the Actions UI, it auto-computes the next semver from the
+latest tag, rolls the `CHANGES.md` `## [Unreleased]` section into a dated version section,
+tags, builds the MKP via `oposs/mkp-builder@v2`, and publishes a GitHub Release whose body
+is that changelog section. It is repo-agnostic — it reads the package name/versions from
+`.mkp-builder.ini` and the notes from `CHANGES.md`, so no per-repo edits are needed.
+
+Keep a `CHANGES.md` (see the template) and add entries under `## [Unreleased]` as you work.
+
+Working on an **existing** plugin that already has a release workflow? You don't need to
+touch any of this — the artifacts are only for bootstrapping a repo's CI.
+
+Read `references/mkp-builder.md` for the full MKP builder reference (the dispatch workflow
+walkthrough, the minimal tag-push alternative, action inputs/outputs, troubleshooting, and
+MKP format details).
 
 ## Upgrading Existing Plugins
 
