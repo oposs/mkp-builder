@@ -22,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `actions/checkout` v4→v7, `actions/upload-artifact` v4→v7,
   `actions/download-artifact` v4→v8, `softprops/action-gh-release` v2→v3
   (`oposs/mkp-builder` stays `@v2`).
+- Commit `.claude-plugin/plugin.json` (previously gitignored) so the plugin owns its
+  own version as the single source of truth (`0.2.0`); the marketplace entry no longer
+  carries a `version`. See `RELEASING.md` for the plugin release process.
 
 ### Fixed
 
