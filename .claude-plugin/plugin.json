@@ -1,7 +1,7 @@
 {
 "name": "cmk-oposs-plugin",
 "description": "A plugin for people developing checkmk plugins",
-"version": "0.2.0",
+"version": "0.2.1",
 "author": {
   "name": "Tobias Oetiker <tobi@oetiker.ch>"
 }
