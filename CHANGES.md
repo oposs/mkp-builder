@@ -27,6 +27,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   carries a `version`. See `RELEASING.md` for the plugin release process.
 
 ### Fixed
+- Correct special-agent secret handling in the checkmk-plugin skill
+  (`references/12-special-agents.md`): a bare `Secret` reaches the agent as an
+  inline `<pw_id>:<pw_store_file>` reference that `replace_passwords()` does not
+  resolve (it only rewrites the legacy `--pwstore=...` argv form), so the old
+  guidance sent the literal reference and every request failed with `401`.
+  Document passing a bare `Secret` (no `.unsafe()`, nothing leaks into `ps`) and
+  resolving it in the agent with `password_store.lookup()`. Plugin `0.2.0`→`0.2.1`.
 
 ## 2.2.0 - 2026-03-02
 ### New
