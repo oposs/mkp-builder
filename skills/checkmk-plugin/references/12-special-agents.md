@@ -60,9 +60,33 @@ A complete special agent plugin consists of four parts:
 # File: ~/local/lib/python3/cmk_addons/plugins/my_plugin/libexec/agent_my_plugin
 
 import argparse
+import os
 import sys
+from pathlib import Path
 import requests
-from cmk.utils.password_store import replace_passwords
+
+
+def resolve_secret(value):
+    """Resolve a Checkmk password-store reference to the real secret.
+
+    A bare ``Secret`` (the secure way to pass a password from the GUI) reaches
+    the agent as an inline ``"<pw_id>:<pw_store_file>"`` reference. Resolve it
+    with ``password_store.lookup()``. Plain/inline values (no ``:`` or a missing
+    store file) pass through unchanged, so offline/test runs keep working.
+
+    IMPORTANT: ``password_store.replace_passwords()`` does NOT rewrite this
+    inline reference, so you must resolve it explicitly here.
+    """
+    if ":" not in value:
+        return value
+    pw_id, pw_file = value.split(":", 1)
+    if not pw_file or not os.path.exists(pw_file):
+        return value
+    try:
+        from cmk.utils.password_store import lookup
+    except ImportError:
+        return value
+    return lookup(Path(pw_file), pw_id)
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser(description="Special agent for My Service")
@@ -86,10 +110,10 @@ def fetch_data(args):
     return response.json()
 
 def main(argv=None):
-    # CRITICAL: Call this first to handle password store
-    replace_passwords()
-
     args = parse_arguments(argv or sys.argv[1:])
+    # A bare `Secret` arrives as a "<pw_id>:<pw_store_file>" reference; resolve
+    # it to the real secret before use (replace_passwords() does NOT do this).
+    args.password = resolve_secret(args.password)
 
     # Output agent section
     print("<<<my_service>>>")
@@ -122,11 +146,16 @@ if __name__ == "__main__":
    ```
    **Without this, the script will not execute when called from the command line!**
 
-3. **Password Handling**: Always call `replace_passwords()` first
+3. **Password Handling**: Pass secrets as a bare `Secret` (not `.unsafe()`) and
+   resolve the resulting `<pw_id>:<pw_store_file>` reference in the agent with
+   `password_store.lookup()` — see [Passing Secrets](#passing-secrets-password-store).
    ```python
-   from cmk.utils.password_store import replace_passwords
-   replace_passwords()  # Must be FIRST thing in main()
+   from cmk.utils.password_store import lookup
+   secret = lookup(Path(pw_file), pw_id)  # resolves the bare-Secret reference
    ```
+   > `replace_passwords()` only rewrites the **legacy** `--pwstore=...` argv form;
+   > it does **not** touch the inline `<id>:<file>` reference a bare `Secret`
+   > produces, so relying on it there yields a silent `401`.
 
 4. **Output Format**: Standard CheckMK agent output
    ```python
@@ -143,8 +172,8 @@ if __name__ == "__main__":
 import json
 
 def main(argv=None):
-    replace_passwords()
     args = parse_arguments(argv or sys.argv[1:])
+    args.password = resolve_secret(args.password)  # resolve password-store ref
 
     # Use separator for JSON data
     print("<<<my_devices:sep(124)>>>")  # Pipe separator
@@ -199,7 +228,7 @@ def commands_function(
     # Build argument list
     args = [
         "-u", params.username,
-        "-p", params.password.unsafe(),  # Extract password from Secret
+        "-p", params.password,  # bare Secret -> "<id>:<file>" ref, resolved in agent
     ]
 
     # Optional parameters
@@ -220,6 +249,36 @@ special_agent_my_plugin = SpecialAgentConfig(
     commands_function=commands_function,
 )
 ```
+
+### Passing Secrets (password store)
+
+A `Secret` parameter can reach the agent in two ways. **Prefer the bare `Secret`.**
+
+| | `params.secret.unsafe()` | bare `params.secret` (recommended) |
+|---|---|---|
+| On the command line | the **plaintext** secret | a `"<pw_id>:<pw_store_file>"` reference |
+| Visible in `ps` / `/proc` | **yes — leaks the secret** | no |
+| Agent must resolve it? | no (already plaintext) | yes, via `password_store.lookup()` |
+
+Emit the bare Secret in `server_side_calls`:
+
+```python
+args = ["-p", params.password]          # NOT params.password.unsafe()
+```
+
+…and resolve it in the agent before use (the `resolve_secret()` helper from the
+[Basic Structure](#basic-structure) section):
+
+```python
+args.password = resolve_secret(args.password)   # "<id>:<file>" -> real secret
+```
+
+> **Do not rely on `replace_passwords()` for this.** It rewrites only the legacy
+> `--pwstore=<idx>@<offset>@<file>@<id>` companion-argument form. A bare `Secret`
+> from `server_side_calls` is an *inline* `<id>:<file>` reference that
+> `replace_passwords()` leaves untouched — so the agent sends the literal
+> reference as the password and every request fails with `401 Unauthorized`.
+> Resolve it explicitly with `password_store.lookup(Path(pw_file), pw_id)`.
 
 ### Advanced Pattern: Multiple Commands
 
@@ -480,9 +539,11 @@ This example uses the `acme_weather` naming convention consistently throughout a
 #!/usr/bin/env python3
 import argparse
 import json
+import os
 import sys
+from pathlib import Path
 import requests
-from cmk.utils.password_store import replace_passwords
+# resolve_secret() as defined in "Basic Structure" above
 
 def parse_arguments(argv):
     parser = argparse.ArgumentParser(description="ACME Weather API Special Agent")
@@ -504,8 +565,8 @@ def fetch_weather(args):
     return response.json()
 
 def main(argv=None):
-    replace_passwords()
     args = parse_arguments(argv or sys.argv[1:])
+    args.api_key = resolve_secret(args.api_key)  # resolve password-store ref
 
     # ✅ Section name matches plugin name
     print("<<<acme_weather:sep(124)>>>")
@@ -549,7 +610,7 @@ def commands_function(
     host_config: HostConfig,
 ) -> Iterator[SpecialAgentCommand]:
     yield SpecialAgentCommand(command_arguments=[
-        "-k", params.api_key.unsafe(),
+        "-k", params.api_key,  # bare Secret (see "Passing Secrets")
         "-l", params.location,
         "--units", params.units,
         host_config.primary_ip_config.address or "api.weather.com",
@@ -712,8 +773,8 @@ cmk --debug --checks=my_plugin hostname
 ```python
 # In special agent
 def main(argv=None):
-    replace_passwords()
     args = parse_arguments(argv or sys.argv[1:])
+    args.password = resolve_secret(args.password)  # resolve password-store ref
 
     # Test mode
     if args.hostaddress == "test":
@@ -760,8 +821,8 @@ def commands_function(params, host_config):
 
 ```python
 def main(argv=None):
-    replace_passwords()
     args = parse_arguments(argv or sys.argv[1:])
+    args.password = resolve_secret(args.password)  # resolve password-store ref
 
     try:
         data = fetch_data(args)
@@ -808,7 +869,7 @@ def fetch_data_with_retry(args, max_retries=3):
 | Problem | Solution |
 |---------|----------|
 | Agent not found | Check naming: `libexec/agent_<name>` matches ruleset `name="<name>"` |
-| Password not working | Must call `replace_passwords()` FIRST |
+| Password not working / `401` | Pass a bare `Secret` and resolve the `<id>:<file>` reference with `password_store.lookup()`; `replace_passwords()` does NOT resolve it |
 | Arguments not passed | Check server_side_calls parameter types match |
 | No data in check | Verify agent outputs correct section name `<<<name>>>` |
 | Import errors | Special agent must be standalone or use cmk modules |
