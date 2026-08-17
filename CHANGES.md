@@ -25,9 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commit `.claude-plugin/plugin.json` (previously gitignored) so the plugin owns its
   own version as the single source of truth (`0.2.0`); the marketplace entry no longer
   carries a `version`. See `RELEASING.md` for the plugin release process.
-- The release now runs in two halves. **Release** prepares a `release/vX.Y.Z` branch that
-  rolls `CHANGES.md` and syncs `.claude-plugin/plugin.json`, and opens a PR;
-  **Publish release** tags, moves `@vX` and publishes once that PR is merged. `main` is
+- The release now runs in two halves. **Create release PR** prepares a `release/vX.Y.Z`
+  branch that rolls `CHANGES.md` and syncs `.claude-plugin/plugin.json`, and opens a PR;
+  **Release publisher** tags, moves `@vX` and publishes once that PR is merged. `main` is
   protected by a ruleset, and the built-in `GITHUB_TOKEN` cannot be granted a bypass —
   the bypass list takes users, teams and GitHub Apps, not the Actions token. Rather than
   introduce an App or a deploy key just to push one commit, the release now lands through
@@ -41,6 +41,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Publishing reads the version back out of that file, which makes it idempotent: if the
   version is already tagged the workflow does nothing, so re-runs and stray pushes to
   `main` are harmless.
+- **Release publisher** has no manual trigger. Publishing is a consequence of merging a
+  release PR, not something anyone can start by hand; with `main` protected against direct
+  pushes, merging a PR that changes `plugin.json` is the only route to a release. A failed
+  run is recovered by re-running it from the Actions UI — the version comes from the
+  repository rather than from run inputs, so a re-run is faithful to the original attempt.
 - Nudging the marketplace after a release is no longer this repository's job. Claude only
   re-resolves plugin versions when it re-fetches the marketplace, so the marketplace has
   to move too — previously a manual step with nothing to enforce it. `oposs/claude-plugins`

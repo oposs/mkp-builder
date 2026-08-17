@@ -1,6 +1,6 @@
-name: Publish release
+name: Release publisher
 
-# Second half of the release. The Release workflow prepares a PR; merging it lands the
+# Second half of the release. "Create release PR" prepares a PR; merging it lands the
 # rolled CHANGES.md and the synced plugin.json on main, and that merge triggers this.
 #
 # main is protected by a ruleset and GITHUB_TOKEN cannot be granted a bypass (the bypass
@@ -10,17 +10,24 @@ name: Publish release
 #
 # The version is read from .claude-plugin/plugin.json rather than passed between jobs,
 # which makes this idempotent: if that version is already tagged there is nothing to do.
-# A re-run, a manual dispatch, or an unrelated push to main is therefore harmless.
+# A re-run or an unrelated push to main is therefore harmless.
+#
+# There is deliberately no workflow_dispatch. Publishing should be a consequence of
+# merging a release PR, never something anyone starts by hand. Combined with the branch
+# ruleset, which forbids pushing to main directly, that leaves exactly one way to reach
+# this workflow: merge a PR that changes plugin.json. Recovery does not need a manual
+# trigger either -- a failed run can be re-run from the Actions UI, and because the
+# version comes from the repository rather than from run inputs, the re-run does exactly
+# what the original attempt would have done.
 
 on:
   push:
     branches: [main]
     paths:
       - '.claude-plugin/plugin.json'
-  workflow_dispatch:
 
 concurrency:
-  group: publish-release
+  group: release-publisher
   cancel-in-progress: false
 
 permissions:

@@ -1,4 +1,4 @@
-name: Release
+name: Create release PR
 
 on:
   workflow_dispatch:
@@ -329,7 +329,7 @@ jobs:
               "- rolls the \`CHANGES.md\` \`[Unreleased]\` section into \`## ${VERSION_NO_V} - ${RELEASE_DATE}\`" \
               "- syncs \`.claude-plugin/plugin.json\` to \`${VERSION_NO_V}\`" \
               "" \
-              "Review the changelog, then merge. Merging triggers **Publish release**, which tags \`${VERSION}\`, moves \`@v${VERSION_NO_V%%.*}\` and publishes the GitHub release." \
+              "Review the changelog, then merge. Merging triggers **Release publisher**, which tags \`${VERSION}\`, moves \`@v${VERSION_NO_V%%.*}\` and publishes the GitHub release." \
               "" \
               "Nothing is tagged or published until this is merged; closing it cancels the release.")")
 
