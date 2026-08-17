@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New
 
 ### Changed
+
+### Fixed
+
+## 2.2.2 - 2026-08-17
+### Changed
 - Renamed the release workflows for what they actually do: `Release` →
   **Create release PR** (`create-release-pr.yml`) and `Publish release` →
   **Release publisher** (`release-publisher.yml`). Since 2.2.1 split the release in two,
@@ -21,8 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now the only route to a release. This costs no recovery: a failed run is re-run from the
   Actions UI regardless of trigger, and because the version is read from `plugin.json`
   rather than from run inputs, a re-run is faithful to the original attempt.
-
-### Fixed
 
 ## 2.2.1 - 2026-08-17
 ### New
