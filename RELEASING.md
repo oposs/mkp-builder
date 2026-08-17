@@ -11,7 +11,7 @@ This repo ships two things, released **together** from a single version stream:
 Git tags (`v2.2.0`, …) with a moving major tag (`@v2`) drive both. A release runs in two
 halves, because `main` is protected — see [Why a PR](#why-a-pr) below.
 
-**1. Run the `Release` workflow** (`workflow_dispatch`, bugfix/feature/major). It:
+**1. Run the `Create release PR` workflow** (`workflow_dispatch`, bugfix/feature/major). It:
 
 1. computes the next version from the latest tag, and refuses if that tag already exists,
 2. rolls the `CHANGES.md` `## [Unreleased]` section into a dated version section,
@@ -20,12 +20,19 @@ halves, because `main` is protected — see [Why a PR](#why-a-pr) below.
 
 Nothing is tagged or published yet. Closing the PR cancels the release.
 
-**2. Review the changelog and merge the PR.** That triggers `Publish release`, which
+**2. Review the changelog and merge the PR.** That triggers `Release publisher`, which
 reads the version back out of `plugin.json`, tags it, moves `@vX`, and publishes the
 GitHub release with the notes from `CHANGES.md`.
 
-Publishing is idempotent: if the version in `plugin.json` is already tagged it does
-nothing. Re-runs, manual dispatches and unrelated pushes to `main` are all harmless.
+`Release publisher` has **no manual trigger, by design** — publishing should be a
+consequence of merging a release PR, never something anyone starts by hand. With `main`
+protected against direct pushes, that leaves exactly one route to a release: merge a PR
+that changes `plugin.json`. If a run fails, re-run it from the Actions UI; the version
+comes from the repository rather than from run inputs, so a re-run does exactly what the
+original attempt would have.
+
+Publishing is also idempotent: if the version in `plugin.json` is already tagged it does
+nothing, so re-runs and unrelated pushes to `main` are harmless.
 
 ### Why a PR
 
@@ -47,8 +54,8 @@ version lines cannot drift apart.
 ### Releasing a plugin or skill change
 
 1. Make the change under `skills/` and merge it to `main`.
-2. Run the **Release** workflow, then merge the release PR it opens. `plugin.json` is
-   bumped for you — there is no hand-written bump commit any more.
+2. Run the **Create release PR** workflow, then merge the release PR it opens.
+   `plugin.json` is bumped for you — there is no hand-written bump commit any more.
 3. Users run `/plugin marketplace update` then `/plugin update cmk-oposs-plugin`.
 
 Nothing else is needed here. Claude only re-resolves plugin versions when it re-fetches
