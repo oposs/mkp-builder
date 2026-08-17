@@ -14,7 +14,9 @@ running the **Release** workflow (`workflow_dispatch`, bugfix/feature/major). It
 1. computes the next version from the latest tag,
 2. rolls the `CHANGES.md` `## [Unreleased]` section into a dated version section,
 3. **rewrites `.claude-plugin/plugin.json` to the same version**,
-4. commits `CHANGES.md` + `plugin.json`, tags, and moves `@v2`.
+4. commits `CHANGES.md` + `plugin.json`, tags, and moves `@v2`,
+5. **records the release in [`oposs/claude-plugins`](https://github.com/oposs/claude-plugins)**,
+   which moves the marketplace clone so Claude re-resolves the new version.
 
 `plugin.json` remains the single source of truth for the plugin version — Claude Code
 resolves `plugin.json → marketplace entry → commit SHA`, and `plugin.json` wins. The
@@ -26,13 +28,21 @@ version lines cannot drift apart.
 ### Releasing a plugin or skill change
 
 1. Make the change under `skills/` and merge it to `main`.
-2. Run the **Release** workflow. It bumps `plugin.json` for you — there is no
-   hand-written bump commit any more.
-3. **Push a change to the marketplace repo** (`oposs/claude-plugins`). Claude only
-   re-resolves plugin versions when it re-fetches the marketplace, so the marketplace
-   clone has to move for the new version to be noticed. A one-line edit is enough.
-   *(Still manual — could be automated from CI with a PAT that can push there.)*
-4. Users run `/plugin marketplace update` then `/plugin update cmk-oposs-plugin`.
+2. Run the **Release** workflow. It bumps `plugin.json` and nudges the marketplace for
+   you — no hand-written bump commit, no manual marketplace edit.
+3. Users run `/plugin marketplace update` then `/plugin update cmk-oposs-plugin`.
+
+### Required secret: `MARKETPLACE_TOKEN`
+
+The marketplace nudge needs a token that can push to `oposs/claude-plugins`, stored in
+this repository as the `MARKETPLACE_TOKEN` secret. Use a **fine-grained PAT** scoped to
+that single repository with **Contents: read and write** — nothing else, and not a
+classic token with blanket `repo` scope.
+
+If the secret is absent the release still completes, but the nudge is skipped and the
+run emits a `::warning::` saying users will not see the new version until you push to
+`oposs/claude-plugins` by hand. If the secret is present and the push fails, the job
+fails loudly rather than pretending the release shipped.
 
 > **Why the version bump matters.** Claude caches a plugin under its resolved version and
 > reads the skill from `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/`.

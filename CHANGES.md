@@ -29,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and commits it with `CHANGES.md`, so the Claude plugin version and the git tag can no
   longer drift. It fails the release if the manifest is missing or the rewrite does not
   take, rather than shipping a release no Claude would ever see.
+- The release workflow now records each release in the marketplace repo
+  (`oposs/claude-plugins/RELEASES.md`) and pushes it. Claude only re-resolves plugin
+  versions when it re-fetches the marketplace, so the marketplace clone has to move for
+  a version bump to be noticed — previously a manual step with nothing to enforce it.
+  Requires a `MARKETPLACE_TOKEN` secret (fine-grained PAT, Contents: write on that repo);
+  without it the release still completes and warns that users will not see the new
+  version. See `RELEASING.md`.
 - Bring the Claude plugin version in sync with the repository's release tags:
   `0.2.1` → `2.2.0` (the current tag). The two version lines had drifted apart because
   only the git tag was automated, so every skill fix needed a hand-written bump commit
