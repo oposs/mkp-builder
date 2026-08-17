@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+
+### Changed
+
+### Fixed
+
+## 2.2.1 - 2026-08-17
+### New
 - Ship the release/CI workflows as copyable skill artifacts under
   `skills/checkmk-plugin/assets/` (`release.yml`, `validate.yml`,
   `CHANGES.md.template`) so plugin repos bootstrap CI with a `cp`, and the skill
