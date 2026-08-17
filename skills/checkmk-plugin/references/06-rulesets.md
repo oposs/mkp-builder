@@ -363,16 +363,30 @@ rule_spec_my_agent_bakery = AgentConfig(
 ```python
 # In check plugin
 def check_my_service(params: Mapping[str, Any], section: Dict) -> CheckResult:
-    # SimpleLevels come as ("fixed", (warn, crit)) or None
+    # SimpleLevels come as ("fixed", (warn, crit)) or ("no_levels", None)
     cpu_levels = params.get('cpu_levels')  # Don't unwrap!
-    
+
     yield from check_levels(
         section.get("cpu", 0),
-        levels_upper=cpu_levels,  # Pass directly!
-        metric_name="cpu",
+        levels_upper=cpu_levels,  # Pass directly - handles both shapes
+        metric_name="mycompany_myplugin_cpu",  # always prefixed
         label="CPU",
         render_func=render.percent,
     )
+```
+
+If you branch on whether levels are configured, test the marker — do **not** rely on
+truthiness. `("no_levels", None)` is a non-empty tuple, so `if cpu_levels:` is `True`
+even when the user switched levels off:
+
+```python
+def _levels_active(levels) -> bool:
+    return isinstance(levels, tuple) and len(levels) == 2 and levels[0] == "fixed"
+
+if _levels_active(cpu_levels):
+    yield from check_levels(value, levels_upper=cpu_levels, metric_name="mycompany_myplugin_cpu", ...)
+else:
+    yield Metric("mycompany_myplugin_cpu", value)   # metric only, no Result
     
     # Other parameters
     if params.get('enabled', True):
@@ -419,7 +433,7 @@ validators.EmailAddress()
 def test_ruleset_params():
     params = {
         'cpu_levels': ('fixed', (80.0, 90.0)),
-        'memory_levels': None,
+        'memory_levels': ('no_levels', None),  # NOT None - see below
         'enabled': True,
         'interval': 60,
     }
@@ -433,7 +447,7 @@ def test_ruleset_params():
     results = list(check_levels(
         85.0,
         levels_upper=cpu_levels,
-        metric_name="cpu",
+        metric_name="mycompany_myplugin_cpu",
     ))
     assert any(r.state == State.WARN for r in results)
 ```
@@ -444,6 +458,8 @@ def test_ruleset_params():
 |---------|----------|
 | Wrong condition type | Use HostCondition for single, HostAndItemCondition for multi-item |
 | SimpleLevels wrapping | Pass directly to check_levels |
+| `cmk-validate-plugins`: "Unable to transform value" | `check_default_parameters` uses plain `None`; use `("no_levels", None)` |
+| Levels fire when the user turned them off | `("no_levels", None)` is truthy; test `levels[0] == "fixed"`, not `if levels:` |
 | Missing ruleset name | Must match check_ruleset_name |
 | Wrong topic | Check available Topic constants |
 

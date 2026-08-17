@@ -352,7 +352,7 @@ def check_ups(params, section):
     yield from check_levels(
         section.get("battery_charge", 0),
         levels_lower=params.get("battery_lower", ("fixed", (20, 10))),
-        metric_name="battery_charge",
+        metric_name="mycompany_ups_battery_charge",
         label="Battery",
         render_func=render.percent,
         boundaries=(0, 100),
@@ -363,7 +363,7 @@ def check_ups(params, section):
     yield from check_levels(
         runtime_s,
         levels_lower=params.get("runtime_lower", ("fixed", (600, 300))),
-        metric_name="runtime",
+        metric_name="mycompany_ups_battery_runtime",
         label="Runtime",
         render_func=render.timespan,
     )

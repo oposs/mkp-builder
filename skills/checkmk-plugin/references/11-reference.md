@@ -301,7 +301,7 @@ None                     # No levels
 yield from check_levels(
     value,
     levels_upper=params.get('levels'),  # Don't unwrap!
-    metric_name="metric",
+    metric_name="mycompany_myplugin_metric",
 )
 ```
 

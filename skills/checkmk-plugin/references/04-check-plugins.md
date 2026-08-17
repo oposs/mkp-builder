@@ -97,7 +97,7 @@ def check_with_levels(params: Mapping[str, Any], section: Dict[str, Any]) -> Che
     yield from check_levels(
         value,
         levels_upper=params.get('cpu_levels'),  # Pass directly!
-        metric_name="cpu_usage",
+        metric_name="mycompany_myplugin_cpu_usage",
         label="CPU usage",
         render_func=render.percent,
         boundaries=(0, 100),
@@ -106,18 +106,19 @@ def check_with_levels(params: Mapping[str, Any], section: Dict[str, Any]) -> Che
 
 ### SimpleLevels Format
 
-**⚠️ CRITICAL**: SimpleLevels from rulesets come as `("fixed", (warn, crit))` or `None`
+**⚠️ CRITICAL**: SimpleLevels from rulesets come as `("fixed", (warn, crit))` when
+thresholds are set, or `("no_levels", None)` when the user switched levels off.
 
 ```python
 # ✅ CORRECT - Pass parameters directly
 def check_my_service(params: Mapping[str, Any], section: Dict[str, Any]) -> CheckResult:
     temperature = section.get("temperature", 0)
-    
+
     yield from check_levels(
         temperature,
         levels_upper=params.get('temp_levels'),  # Direct pass!
         levels_lower=params.get('temp_levels_lower'),  # Direct pass!
-        metric_name="temperature",
+        metric_name="mycompany_myplugin_temperature",  # always prefixed
         label="Temperature",
         render_func=lambda v: f"{v:.1f}°C",
     )
@@ -126,6 +127,25 @@ def check_my_service(params: Mapping[str, Any], section: Dict[str, Any]) -> Chec
 storage_levels = params.get('storage_levels')
 if isinstance(storage_levels, dict):  # WRONG! It's a tuple!
     levels = storage_levels.get('levels_upper')  # This will fail!
+```
+
+**⚠️ Never guard on truthiness.** `("no_levels", None)` is a non-empty tuple, so
+`if levels:` is `True` even when the user turned levels off — the check then reports
+thresholds nobody asked for, with no error to reveal it:
+
+```python
+# ❌ WRONG - runs when levels are OFF
+if params.get('temp_levels'):
+    yield from check_levels(temperature, levels_upper=params['temp_levels'], ...)
+
+# ✅ CORRECT - test the marker
+def _levels_active(levels) -> bool:
+    return isinstance(levels, tuple) and len(levels) == 2 and levels[0] == "fixed"
+
+if _levels_active(params.get('temp_levels')):
+    yield from check_levels(temperature, levels_upper=params['temp_levels'], ...)
+else:
+    yield Metric("mycompany_myplugin_temperature", temperature)  # metric only
 ```
 
 ### Multi-Item Services
@@ -248,21 +268,21 @@ def check_with_render(section: Dict[str, Any]) -> CheckResult:
     # Built-in render functions
     yield from check_levels(
         section.get("memory_bytes", 0),
-        metric_name="memory",
+        metric_name="mycompany_myplugin_memory",
         label="Memory",
         render_func=render.bytes,  # Auto-formats as KiB, MiB, GiB
     )
     
     yield from check_levels(
         section.get("uptime_seconds", 0),
-        metric_name="uptime",
+        metric_name="mycompany_myplugin_uptime",
         label="Uptime",
         render_func=render.timespan,  # Formats as "2d 3h 15m"
     )
     
     yield from check_levels(
         section.get("cpu_percent", 0),
-        metric_name="cpu",
+        metric_name="mycompany_myplugin_cpu",
         label="CPU",
         render_func=render.percent,  # Formats as "45.2%"
     )
@@ -287,8 +307,9 @@ check_plugin_with_defaults = CheckPlugin(
         'temp_levels_upper': ('fixed', (80.0, 90.0)),
         'temp_levels_lower': ('fixed', (10.0, 5.0)),
         
-        # No levels
-        'disk_levels': None,
+        # No levels - use the SimpleLevels marker, NOT plain None.
+        # Plain None fails cmk-validate-plugins: "Unable to transform value".
+        'disk_levels': ('no_levels', None),
         
         # Other parameters
         'check_interval': 60,
@@ -381,7 +402,7 @@ def check_advanced(item, params, section):
     yield from check_levels(
         data.get("cpu", 0),
         levels_upper=params.get('cpu_levels'),
-        metric_name="cpu",
+        metric_name="mycompany_myplugin_cpu",
         label="CPU usage",
         render_func=render.percent,
     )
@@ -389,7 +410,7 @@ def check_advanced(item, params, section):
     yield from check_levels(
         data.get("memory", 0),
         levels_upper=params.get('memory_levels'),
-        metric_name="memory",
+        metric_name="mycompany_myplugin_memory",
         label="Memory",
         render_func=render.bytes,
     )

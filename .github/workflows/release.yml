@@ -325,6 +325,38 @@ jobs:
           echo "Updated CHANGES.md for version ${VERSION_NO_V}"
           echo "::endgroup::"
 
+      - name: Sync Claude plugin version
+        env:
+          VERSION_NO_V: ${{ steps.generate_version.outputs.version_no_v }}
+        run: |
+          set -euo pipefail
+          echo "::group::Syncing .claude-plugin/plugin.json"
+
+          MANIFEST=.claude-plugin/plugin.json
+
+          # Claude caches a plugin under its resolved version, so a skill change
+          # only reaches users once this version moves. Keeping it equal to the
+          # release tag makes shipping a skill fix just a matter of cutting a
+          # release, instead of a separate hand-written bump that is easy to forget.
+          if [[ ! -f "$MANIFEST" ]]; then
+            echo "::error title=Missing plugin manifest::$MANIFEST not found - Claude plugin users would silently miss this release"
+            exit 1
+          fi
+
+          OLD_VERSION=$(jq -r '.version // "unset"' "$MANIFEST")
+          jq --indent 2 --arg v "$VERSION_NO_V" '.version = $v' "$MANIFEST" > "$MANIFEST.tmp"
+          mv "$MANIFEST.tmp" "$MANIFEST"
+
+          NEW_VERSION=$(jq -r '.version' "$MANIFEST")
+          if [[ "$NEW_VERSION" != "$VERSION_NO_V" ]]; then
+            echo "::error title=Version sync failed::expected ${VERSION_NO_V}, got ${NEW_VERSION}"
+            exit 1
+          fi
+
+          echo "::notice title=Plugin Version Synced::.claude-plugin/plugin.json ${OLD_VERSION} -> ${NEW_VERSION}"
+          echo "- **Claude plugin version:** ${OLD_VERSION} → ${NEW_VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo "::endgroup::"
+
       - name: Commit and Create tags
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -337,10 +369,10 @@ jobs:
           VERSION="${{ steps.generate_version.outputs.version }}"
           VERSION_NO_V="${{ steps.generate_version.outputs.version_no_v }}"
 
-          # Commit CHANGES.md update
-          git add CHANGES.md
-          git commit -m "Update CHANGES.md for release ${VERSION}"
-          echo "::notice title=Commit Created::Created commit with CHANGES.md updates"
+          # Commit CHANGES.md and the synced Claude plugin manifest
+          git add CHANGES.md .claude-plugin/plugin.json
+          git commit -m "Update CHANGES.md and plugin.json for release ${VERSION}"
+          echo "::notice title=Commit Created::Created commit with CHANGES.md and plugin.json updates"
 
           # Create semantic version tag
           git tag -a ${VERSION} -m "Release ${VERSION}"

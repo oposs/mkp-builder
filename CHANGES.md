@@ -25,8 +25,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commit `.claude-plugin/plugin.json` (previously gitignored) so the plugin owns its
   own version as the single source of truth (`0.2.0`); the marketplace entry no longer
   carries a `version`. See `RELEASING.md` for the plugin release process.
+- The release workflow now rewrites `.claude-plugin/plugin.json` to the release version
+  and commits it with `CHANGES.md`, so the Claude plugin version and the git tag can no
+  longer drift. It fails the release if the manifest is missing or the rewrite does not
+  take, rather than shipping a release no Claude would ever see.
+- Nudging the marketplace after a release is no longer this repository's job. Claude only
+  re-resolves plugin versions when it re-fetches the marketplace, so the marketplace has
+  to move too — previously a manual step with nothing to enforce it. `oposs/claude-plugins`
+  now runs an hourly workflow that reads this repo's `plugin.json` and commits when the
+  version changes. Pulling rather than pushing needs no cross-repo credential (the org
+  restricts fine-grained PATs), covers every plugin rather than only those wired up to
+  push, and catches versions bumped outside the release workflow. See `RELEASING.md`.
+- Bring the Claude plugin version in sync with the repository's release tags:
+  `0.2.1` → `2.2.0` (the current tag). The two version lines had drifted apart because
+  only the git tag was automated, so every skill fix needed a hand-written bump commit
+  that trailed the fix by a separate PR.
 
 ### Fixed
+- Skill changes could ship without reaching anyone. Claude caches a plugin under its
+  resolved version, so merging a skill fix had no effect until `plugin.json` was bumped
+  by hand — a step with nothing to enforce it and no signal when it was missed. The
+  installed copy on a developer machine was found 10 commits behind `main`, missing
+  three merged skill fixes.
 - Correct special-agent secret handling in the checkmk-plugin skill
   (`references/12-special-agents.md`): a bare `Secret` reaches the agent as an
   inline `<pw_id>:<pw_store_file>` reference that `replace_passwords()` does not

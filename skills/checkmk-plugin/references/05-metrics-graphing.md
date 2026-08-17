@@ -17,9 +17,10 @@ yield Metric("latency", latency_seconds)
 yield Metric("latency", latency_ns)  # Storing nanoseconds
 ```
 
-### Metric Naming: Always Use Prefixes!
+### Naming: Always Use Prefixes!
 
-**⚠️ IMPORTANT**: Always prefix metric names with `mycompany_myplugin_` format!
+**⚠️ IMPORTANT**: Prefix with `mycompany_myplugin_` format — not just metric names, but
+every `name=` in this file: `Metric`, `Graph`, `Bidirectional`, `Perfometer`, `Stacked`.
 
 See **[01-quickstart.md](01-quickstart.md#metric-names-critical)** for complete naming conventions.
 
@@ -27,12 +28,31 @@ See **[01-quickstart.md](01-quickstart.md#metric-names-critical)** for complete 
 ```python
 # ❌ WRONG - Generic names
 yield Metric("cpu_usage", 45.0)
+graph_acme_widget = Graph(name="widget_perf", ...)
+perfometer_acme_widget = Perfometer(name="widget_load", ...)
 
 # ✅ CORRECT - Prefixed
 yield Metric("acme_widget_cpu_usage", 45.0)
+graph_acme_widget = Graph(name="acme_widget_perf", ...)
+perfometer_acme_widget = Perfometer(name="acme_widget_load", ...)
 ```
 
-**Why?** CheckMK has ~1,000 built-in metrics. Unprefixed names cause conflicts and can be overridden by CheckMK updates. See [01-quickstart.md](01-quickstart.md) and [13-metric-migration.md](13-metric-migration.md) for details.
+**Why?** All of these names go into one global, site-wide registry shared with the
+built-in plugins, and CheckMK ships ~1,000 built-in metrics with more added in 3.0.
+A duplicate is not a graphing glitch: on CheckMK 3.0 it is a hard error that prevents
+your **entire package** from loading and breaks `cmk-update-config`:
+
+```
+plug-in 'read_ops' already defined at
+cmk.plugins.collection.graphing.standalone:metric_read_ops
+```
+
+Don't be misled by the `metric_` / `graph_` / `perfometer_` **variable** prefixes — those
+only make Checkmk discover the object. The collision is on the `name=` string, and the
+two are unrelated: `graph_acme_widget = Graph(name="widget_perf")` is discovered
+correctly and still collides.
+
+See [01-quickstart.md](01-quickstart.md) and [13-metric-migration.md](13-metric-migration.md) for details.
 
 ### Basic Metric Definition
 
