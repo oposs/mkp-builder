@@ -91,23 +91,55 @@ Checkmk discovers plugins by scanning for module-level variables with specific p
 **Wrong:** `my_section = AgentSection(...)` — Checkmk ignores it.
 **Right:** `agent_section_my_service = AgentSection(...)` — discovered automatically.
 
-### Metric Naming
+### Metric, Graph and Perfometer Naming
 
-Checkmk has ~1,000 built-in metrics. Unprefixed names silently conflict and break graphing.
+Checkmk ships ~1,000 built-in metrics, and Checkmk 3.0 added more. **Every `name=` you
+pass to a `Metric`, `Graph`, `Bidirectional`, `Perfometer` or `Stacked` goes into a
+global, site-wide registry shared with the built-in plugins.** A duplicate is not a
+graphing glitch — on Checkmk 3.0 it is a hard error that stops your **entire package**
+from loading and breaks `cmk-update-config` on upgrade:
 
-**Format:** `{company}_{plugin}_{metric_name}`
+```
+plug-in 'read_ops' already defined at
+cmk.plugins.collection.graphing.standalone:metric_read_ops
+```
+
+**Format:** `{company}_{plugin}_{name}` — for metrics *and* for graphs and perfometers.
 
 ```python
-# WRONG - will conflict with built-in metrics
+# WRONG - collides with built-in metrics
 yield Metric("cpu_usage", 45.0)
-yield Metric("temperature", 65.0)
+yield Metric("read_ops", 120.0)
 
 # RIGHT - prefixed and safe
 yield Metric("acme_widget_cpu_usage", 45.0)
-yield Metric("acme_widget_temperature", 65.0)
+yield Metric("acme_widget_read_ops", 120.0)
 ```
 
+```python
+# WRONG - graph and perfometer names share the registry with metric names
+graph_acme_widget_io = Graph(name="widget_io", ...)
+perfometer_acme_widget = Perfometer(name="widget_load", ...)
+
+# RIGHT
+graph_acme_widget_io = Graph(name="acme_widget_io", ...)
+perfometer_acme_widget = Perfometer(name="acme_widget_load", ...)
+```
+
+Note the two independent names: the Python variable needs the `graph_` / `perfometer_` /
+`metric_` **prefix so Checkmk discovers it**, while the `name=` string needs your
+**company prefix so it does not collide**. Getting the variable right does nothing for
+the collision.
+
+Generic words are the dangerous ones: `read_ops`, `write_ops`, `free`, `allocated`,
+`temperature`, `latency`, `cpu_usage`. Prefix everything rather than guessing which names
+Checkmk already owns or will claim in a future release.
+
 Ask the user for their organization/company name to determine the prefix (e.g., `acme_`, `myorg_`).
+
+> Renaming these later is a breaking change that orphans RRD history unless you ship
+> translations with it. Get the prefix right in the first release — see
+> `references/13-metric-migration.md` if you are fixing it after the fact.
 
 ### Base SI Units
 
@@ -127,7 +159,48 @@ yield Metric("acme_widget_size", size_bytes)
 
 ### SimpleLevels Format
 
-Rulesets deliver levels as `("fixed", (warn, crit))` or `None`. Pass them directly to `check_levels()` — never unwrap or restructure them.
+`SimpleLevels` has exactly two shapes: `("fixed", (warn, crit))` when thresholds are set,
+and `("no_levels", None)` when the user turns levels off. Pass them directly to
+`check_levels()` — never unwrap or restructure them.
+
+**In `check_default_parameters`, use `("no_levels", None)`, never plain `None`.** The
+ruleset validates your defaults against the form spec, and a bare `None` fails
+`cmk-validate-plugins` with one error per parameter:
+
+```
+Default parameters 'check_default_parameters' specified by CheckPlugin 'acme_widget'
+cannot be read by referenced rule spec 'acme_widget':
+ValidationMessage(location=['cpu_levels'], message='Unable to transform value', ...)
+```
+
+```python
+check_default_parameters={
+    "cpu_levels": ("fixed", (80.0, 90.0)),   # thresholds on by default
+    "temp_levels": ("no_levels", None),      # off by default - NOT None
+}
+```
+
+**Then guard on the marker, not on truthiness.** `("no_levels", None)` is a non-empty
+tuple, so `if levels:` is `True` for it. That silently treats "levels off" as "levels
+configured" — the opposite of what the user asked for, with no error anywhere:
+
+```python
+# WRONG - ("no_levels", None) is truthy, so this branch runs when levels are OFF
+if params.get("cpu_levels"):
+    yield from check_levels(value, levels_upper=params["cpu_levels"], ...)
+
+# RIGHT - test the marker explicitly
+def _levels_active(levels) -> bool:
+    return isinstance(levels, tuple) and len(levels) == 2 and levels[0] == "fixed"
+
+if _levels_active(params.get("cpu_levels")):
+    yield from check_levels(value, levels_upper=params["cpu_levels"], ...)
+else:
+    yield Metric("acme_widget_cpu", value)   # metric only, no Result
+```
+
+You only need `_levels_active()` where you branch on whether levels exist. If you always
+call `check_levels()`, pass the parameter straight through — it handles both shapes.
 
 ```python
 # RIGHT - pass directly
@@ -332,10 +405,10 @@ MKP format details).
 When upgrading a plugin from the old Checkmk API (pre-2.3) or fixing convention issues:
 
 1. **Check entry-point prefixes** — ensure all module-level variables use the correct prefix
-2. **Add metric prefixes** — rename bare metrics like `cpu` to `acme_widget_cpu`; use translations to preserve history (see `references/13-metric-migration.md`)
+2. **Add metric prefixes** — rename bare metrics like `cpu` to `acme_widget_cpu`; use translations to preserve history (see `references/13-metric-migration.md`). Do the **graph and perfometer** `name=` strings in the same pass — they share the metric registry, and renaming them later is a second breaking change
 3. **Convert to base SI units** — if metrics were stored in ms/KB, add `ScaleBy` translations
 4. **Update imports** — change `cmk.agent_based.v1` to `cmk.agent_based.v2`
-5. **Fix SimpleLevels handling** — ensure parameters are passed directly to `check_levels()`
+5. **Fix SimpleLevels handling** — ensure parameters are passed directly to `check_levels()`, replace plain `None` defaults with `("no_levels", None)`, and replace any `if levels:` guard with an explicit `levels[0] == "fixed"` test
 6. **Update directory structure** — move files to `cmk_addons/plugins/<name>/` layout
 7. **Add `.mkp-builder.ini`** — for automated MKP packaging
 
@@ -356,7 +429,10 @@ snmpwalk -v2c -c public host .1.3.6.1.2.1.1       # SNMP exploration
 | Problem | Cause | Fix |
 |---------|-------|-----|
 | Plugin not discovered | Missing variable prefix | Add `agent_section_`, `check_plugin_`, etc. |
+| Whole package fails to load on 3.0, `plug-in 'x' already defined` | Unprefixed metric, graph or perfometer `name=` collides with a built-in | Prefix every `name=` with `company_plugin_` |
 | Metrics conflict | Unprefixed metric names | Use `company_plugin_metric` format |
+| `cmk-validate-plugins`: `Unable to transform value` | `check_default_parameters` uses plain `None` for a SimpleLevels parameter | Use `("no_levels", None)` |
+| Levels appear configured when the user turned them off | `if levels:` — `("no_levels", None)` is truthy | Test `levels[0] == "fixed"` explicitly |
 | Ruleset doesn't apply | Wrong condition type | Match `HostCondition`/`HostAndItemCondition` to discovery |
 | SimpleLevels crash | Unwrapping the tuple | Pass directly to `check_levels()` |
 | Graphs show wrong scale | Non-base units stored | Convert to seconds/bytes before yielding |

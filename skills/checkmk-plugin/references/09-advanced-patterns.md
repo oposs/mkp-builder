@@ -176,7 +176,7 @@ def check_with_conversions(section):
     yield from check_levels(
         latency_s,
         levels_upper=("fixed", (0.05, 0.1)),  # 50ms, 100ms
-        metric_name="latency",
+        metric_name="mycompany_myplugin_latency",
         render_func=render.timespan,
     )
 ```
@@ -206,7 +206,7 @@ def _render_temperature_c(value: float) -> str:
 yield from check_levels(
     iops,
     levels_upper=("fixed", (10000, 20000)),
-    metric_name="iops",
+    metric_name="mycompany_myplugin_iops",
     render_func=_render_iops,
     label="I/O Operations",
 )
