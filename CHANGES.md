@@ -25,10 +25,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Commit `.claude-plugin/plugin.json` (previously gitignored) so the plugin owns its
   own version as the single source of truth (`0.2.0`); the marketplace entry no longer
   carries a `version`. See `RELEASING.md` for the plugin release process.
-- The release workflow now rewrites `.claude-plugin/plugin.json` to the release version
-  and commits it with `CHANGES.md`, so the Claude plugin version and the git tag can no
-  longer drift. It fails the release if the manifest is missing or the rewrite does not
-  take, rather than shipping a release no Claude would ever see.
+- The release now runs in two halves. **Release** prepares a `release/vX.Y.Z` branch that
+  rolls `CHANGES.md` and syncs `.claude-plugin/plugin.json`, and opens a PR;
+  **Publish release** tags, moves `@vX` and publishes once that PR is merged. `main` is
+  protected by a ruleset, and the built-in `GITHUB_TOKEN` cannot be granted a bypass —
+  the bypass list takes users, teams and GitHub Apps, not the Actions token. Rather than
+  introduce an App or a deploy key just to push one commit, the release now lands through
+  a PR like any other change. Tagging is unaffected, since the ruleset targets branches
+  and tags are a separate ref namespace. The changelog roll and version bump are now
+  reviewable before they ship, and nothing is tagged until the PR is merged, so closing
+  it cancels the release.
+- The release syncs `.claude-plugin/plugin.json` to the release version, so the Claude
+  plugin version and the git tag can no longer drift. It fails if the manifest is missing
+  or the rewrite does not take, rather than shipping a release no Claude would ever see.
+  Publishing reads the version back out of that file, which makes it idempotent: if the
+  version is already tagged the workflow does nothing, so re-runs and stray pushes to
+  `main` are harmless.
 - Nudging the marketplace after a release is no longer this repository's job. Claude only
   re-resolves plugin versions when it re-fetches the marketplace, so the marketplace has
   to move too — previously a manual step with nothing to enforce it. `oposs/claude-plugins`
