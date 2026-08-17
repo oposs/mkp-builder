@@ -177,15 +177,14 @@ jobs:
               return core.setFailed(`Tests failed for this commit with conclusion: ${run.conclusion}. Please fix the failing tests before releasing.`);
             }
 
-  create-tag:
-    name: Create Release Tag
+  prepare:
+    name: Prepare Release PR
     runs-on: ubuntu-latest
     needs: verify-tests
     timeout-minutes: 10
-    outputs:
-      version: ${{ steps.generate_version.outputs.version }}
-      version_no_v: ${{ steps.generate_version.outputs.version_no_v }}
-      release_date: ${{ steps.generate_version.outputs.release_date }}
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code with history
         uses: actions/checkout@v4
@@ -197,53 +196,31 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::Version generation"
-          # Get the latest tag from git
           git fetch --tags
           LATEST_TAG=$(git describe --tags --match 'v[0-9]*.[0-9]*.[0-9]*' --abbrev=0 2>/dev/null || echo "v0.0.0")
           echo "Latest tag: $LATEST_TAG"
 
-          # Parse the latest tag to get major, minor, and patch
           MAJOR=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\1/')
           MINOR=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\2/')
           PATCH=$(echo $LATEST_TAG | sed -E 's/v([0-9]+)\.([0-9]+)\.([0-9]+).*/\3/')
-
           echo "Current version: $MAJOR.$MINOR.$PATCH"
 
-          # Increment based on release type
           case "${{ github.event.inputs.release_type }}" in
-            major)
-              MAJOR=$((MAJOR+1))
-              MINOR=0
-              PATCH=0
-              ;;
-            feature)
-              MINOR=$((MINOR+1))
-              PATCH=0
-              ;;
-            bugfix)
-              PATCH=$((PATCH+1))
-              ;;
+            major)   MAJOR=$((MAJOR+1)); MINOR=0; PATCH=0 ;;
+            feature) MINOR=$((MINOR+1)); PATCH=0 ;;
+            bugfix)  PATCH=$((PATCH+1)) ;;
           esac
 
-          # Generate new version
           NEW_VERSION="v$MAJOR.$MINOR.$PATCH"
           echo "::notice title=New Version::New version will be: $NEW_VERSION (from $LATEST_TAG)"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
-
-          # Also create a version without the v prefix for CHANGES.md
           echo "version_no_v=$MAJOR.$MINOR.$PATCH" >> $GITHUB_OUTPUT
+          echo "release_date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
-          # Get current date in YYYY-MM-DD format
-          RELEASE_DATE=$(date +%Y-%m-%d)
-          echo "release_date=$RELEASE_DATE" >> $GITHUB_OUTPUT
-
-          # Add version info to job summary
-          echo "## Version Information" >> $GITHUB_STEP_SUMMARY
-          echo "- **Previous version:** $LATEST_TAG" >> $GITHUB_STEP_SUMMARY
-          echo "- **New version:** $NEW_VERSION" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release type:** ${{ github.event.inputs.release_type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release date:** $RELEASE_DATE" >> $GITHUB_STEP_SUMMARY
-
+          if git rev-parse -q --verify "refs/tags/$NEW_VERSION" >/dev/null; then
+            echo "::error title=Tag exists::$NEW_VERSION is already tagged"
+            exit 1
+          fi
           echo "::endgroup::"
 
       - name: Update CHANGES.md
@@ -253,75 +230,33 @@ jobs:
         run: |
           set -euo pipefail
           echo "::group::Updating CHANGES.md"
-
-          # Use Perl to update CHANGES.md
           perl -i -e '
             use strict;
             use warnings;
-
-            # Read the file content
             my $content = do { local $/; <> };
-
-            # Extract the Unreleased section
             my ($before, $unreleased_section, $after) =
               $content =~ /^(.*?)(## \[Unreleased\].*?)(?=^## \d|\Z)(.*)/ms;
-
-            # Initialize variables for sections
-            my $has_new = 0;
-            my $has_changed = 0;
-            my $has_fixed = 0;
-            my $new_content = "";
-            my $changed_content = "";
-            my $fixed_content = "";
-
-            # Extract content for each section if it exists
+            my ($has_new, $has_changed, $has_fixed) = (0, 0, 0);
+            my ($new_content, $changed_content, $fixed_content) = ("", "", "");
             if ($unreleased_section =~ /### New(.*?)(?=^###|\Z)/ms) {
-              my $section = $1;
-              $section =~ s/^\s+|\s+$//g;
-              if ($section) {
-                $has_new = 1;
-                $new_content = $section;
-              }
+              my $section = $1; $section =~ s/^\s+|\s+$//g;
+              if ($section) { $has_new = 1; $new_content = $section; }
             }
-
             if ($unreleased_section =~ /### Changed(.*?)(?=^###|\Z)/ms) {
-              my $section = $1;
-              $section =~ s/^\s+|\s+$//g;
-              if ($section) {
-                $has_changed = 1;
-                $changed_content = $section;
-              }
+              my $section = $1; $section =~ s/^\s+|\s+$//g;
+              if ($section) { $has_changed = 1; $changed_content = $section; }
             }
-
             if ($unreleased_section =~ /### Fixed(.*?)(?=^###|\Z)/ms) {
-              my $section = $1;
-              $section =~ s/^\s+|\s+$//g;
-              if ($section) {
-                $has_fixed = 1;
-                $fixed_content = $section;
-              }
+              my $section = $1; $section =~ s/^\s+|\s+$//g;
+              if ($section) { $has_fixed = 1; $fixed_content = $section; }
             }
-
-            # Build new Unreleased section
-            my $new_unreleased = "## [Unreleased]\n\n".
-            "### New\n\n### Changed\n\n### Fixed\n\n";
-
-            # Build version section with only non-empty sections
+            my $new_unreleased = "## [Unreleased]\n\n### New\n\n### Changed\n\n### Fixed\n\n";
             my $version_section = "## $ENV{VERSION_NO_V} - $ENV{RELEASE_DATE}\n";
-            if ($has_new) {
-              $version_section .= "### New\n$new_content\n\n";
-            }
-            if ($has_changed) {
-              $version_section .= "### Changed\n$changed_content\n\n";
-            }
-            if ($has_fixed) {
-              $version_section .= "### Fixed\n$fixed_content\n\n";
-            }
-
-            # Put it all together
+            $version_section .= "### New\n$new_content\n\n"         if $has_new;
+            $version_section .= "### Changed\n$changed_content\n\n" if $has_changed;
+            $version_section .= "### Fixed\n$fixed_content\n\n"     if $has_fixed;
             print $before . $new_unreleased . $version_section . $after;
           ' CHANGES.md
-
           echo "Updated CHANGES.md for version ${VERSION_NO_V}"
           echo "::endgroup::"
 
@@ -334,10 +269,10 @@ jobs:
 
           MANIFEST=.claude-plugin/plugin.json
 
-          # Claude caches a plugin under its resolved version, so a skill change
-          # only reaches users once this version moves. Keeping it equal to the
-          # release tag makes shipping a skill fix just a matter of cutting a
-          # release, instead of a separate hand-written bump that is easy to forget.
+          # Claude caches a plugin under its resolved version, so a skill change only
+          # reaches users once this version moves. Keeping it equal to the release tag
+          # makes shipping a skill fix just a matter of cutting a release. The publish
+          # workflow also reads this file to decide what to tag.
           if [[ ! -f "$MANIFEST" ]]; then
             echo "::error title=Missing plugin manifest::$MANIFEST not found - Claude plugin users would silently miss this release"
             exit 1
@@ -354,140 +289,54 @@ jobs:
           fi
 
           echo "::notice title=Plugin Version Synced::.claude-plugin/plugin.json ${OLD_VERSION} -> ${NEW_VERSION}"
-          echo "- **Claude plugin version:** ${OLD_VERSION} → ${NEW_VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "::endgroup::"
 
-      - name: Commit and Create tags
+      - name: Open release PR
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.generate_version.outputs.version }}
+          VERSION_NO_V: ${{ steps.generate_version.outputs.version_no_v }}
+          RELEASE_DATE: ${{ steps.generate_version.outputs.release_date }}
         run: |
           set -euo pipefail
-          echo "::group::Creating tags and pushing changes"
+          echo "::group::Opening release PR"
+
+          BRANCH="release/${VERSION}"
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-          VERSION="${{ steps.generate_version.outputs.version }}"
-          VERSION_NO_V="${{ steps.generate_version.outputs.version_no_v }}"
-
-          # Commit CHANGES.md and the synced Claude plugin manifest
+          git checkout -b "$BRANCH"
           git add CHANGES.md .claude-plugin/plugin.json
-          git commit -m "Update CHANGES.md and plugin.json for release ${VERSION}"
-          echo "::notice title=Commit Created::Created commit with CHANGES.md and plugin.json updates"
 
-          # Create semantic version tag
-          git tag -a ${VERSION} -m "Release ${VERSION}"
-          echo "::notice title=Semantic Tag Created::Created tag ${VERSION}"
-
-          # Extract major version for GitHub Actions best practices
-          MAJOR_VERSION=$(echo ${VERSION} | sed 's/^v\([0-9]*\).*/v\1/')
-          echo "Major version: ${MAJOR_VERSION}"
-
-          # Create or update major version tag (GitHub Actions best practice)
-          # This allows users to pin to @v1, @v2, etc. for automatic updates
-          if git tag -l | grep -q "^${MAJOR_VERSION}$"; then
-            # Update existing major version tag
-            git tag -d ${MAJOR_VERSION}
-            git tag -a ${MAJOR_VERSION} -m "Update major version ${MAJOR_VERSION} to ${VERSION}"
-            echo "::notice title=Major Tag Updated::Updated major version tag ${MAJOR_VERSION} to point to ${VERSION}"
-          else
-            # Create new major version tag
-            git tag -a ${MAJOR_VERSION} -m "Create major version ${MAJOR_VERSION} for ${VERSION}"
-            echo "::notice title=Major Tag Created::Created major version tag ${MAJOR_VERSION} for ${VERSION}"
+          if git diff --cached --quiet; then
+            echo "::error title=Nothing to release::CHANGES.md and plugin.json are unchanged - is the Unreleased section empty?"
+            exit 1
           fi
 
-          # Push changes and tags
-          git push origin main
-          git push origin ${VERSION}
-          git push origin ${MAJOR_VERSION} --force
-          
-          echo "::notice title=Changes Pushed::Pushed changes and tags to repository"
-          echo "📦 **Version Tags Created:**" >> $GITHUB_STEP_SUMMARY
-          echo "- Semantic version: \`${VERSION}\` (exact version)" >> $GITHUB_STEP_SUMMARY
-          echo "- Major version: \`${MAJOR_VERSION}\` (latest ${MAJOR_VERSION}.x)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Usage examples:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
-          echo "# Pin to exact version (recommended for production)" >> $GITHUB_STEP_SUMMARY
-          echo "- uses: oposs/mkp-builder@${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "# Pin to major version (gets latest features/fixes)" >> $GITHUB_STEP_SUMMARY
-          echo "- uses: oposs/mkp-builder@${MAJOR_VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          git commit -m "Release ${VERSION}"
+          git push origin "$BRANCH"
+
+          # main is protected and GITHUB_TOKEN cannot be given a ruleset bypass, so the
+          # release lands through a PR like any other change. Merging it triggers the
+          # publish workflow, which tags and releases.
+          PR_URL=$(gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Release ${VERSION}" \
+            --body "$(printf '%s\n' \
+              "Prepared automatically by the **Release** workflow." \
+              "" \
+              "- rolls the \`CHANGES.md\` \`[Unreleased]\` section into \`## ${VERSION_NO_V} - ${RELEASE_DATE}\`" \
+              "- syncs \`.claude-plugin/plugin.json\` to \`${VERSION_NO_V}\`" \
+              "" \
+              "Review the changelog, then merge. Merging triggers **Publish release**, which tags \`${VERSION}\`, moves \`@v${VERSION_NO_V%%.*}\` and publishes the GitHub release." \
+              "" \
+              "Nothing is tagged or published until this is merged; closing it cancels the release.")")
+
+          echo "::notice title=Release PR opened::${PR_URL}"
+          {
+            echo "## Release ${VERSION} prepared"
+            echo ""
+            echo "Review and merge to publish: ${PR_URL}"
+          } >> $GITHUB_STEP_SUMMARY
           echo "::endgroup::"
-
-  create-release:
-    name: Create GitHub Release
-    needs: create-tag
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout code for release notes
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.create-tag.outputs.version }}
-
-      - name: Extract release notes
-        id: extract_release_notes
-        run: |
-          set -e
-          echo "::group::Extracting release notes"
-
-          # Extract version number without 'v' prefix for CHANGES.md
-          VERSION_NO_V=$(echo "${{ needs.create-tag.outputs.version }}" | sed 's/^v//')
-          echo "Looking for version: ${VERSION_NO_V}"
-
-          # Use Perl to extract the relevant section - much more reliable than bash/awk
-          perl -e '
-            # Get version from first argument
-            my $version = $ARGV[0];
-
-            # Read the entire CHANGES.md file
-            undef $/;
-            my $content = <STDIN>;
-
-            # Use a regex to find the section for our version
-            if ($content =~ /## \Q$version\E[^\n]*\n(.*?)(?=\n## [0-9]|$)/s) {
-              my $section = $1;
-              # Trim leading/trailing whitespace
-              $section =~ s/^\s+|\s+$//g;
-              print $section;
-            } else {
-              # Not found, create minimal content
-              print "Release version $version\n";
-              warn "WARNING: Could not find version $version in CHANGES.md\n";
-            }
-          ' "$VERSION_NO_V" < CHANGES.md > release_notes_final.md
-
-          # Show the result
-          echo "Release notes extracted to release_notes_final.md:"
-          cat release_notes_final.md
-          echo "::endgroup::"
-
-      - name: Set version without v prefix
-        id: set_version_without_v
-        run: |
-          TAG=${{ needs.create-tag.outputs.version }}
-          echo "VERSION=${TAG#v}" >> $GITHUB_ENV
-
-      - name: Create Release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ needs.create-tag.outputs.version }}
-          name: Release ${{ env.VERSION }}
-          draft: false
-          prerelease: false
-          body_path: release_notes_final.md
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Generate release summary
-        run: |
-          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ needs.create-tag.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release Date:** ${{ needs.create-tag.outputs.release_date }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Release URL:** ${{ steps.create_release.outputs.url }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Release Notes" >> $GITHUB_STEP_SUMMARY
-          cat release_notes_final.md >> $GITHUB_STEP_SUMMARY

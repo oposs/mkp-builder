@@ -8,13 +8,34 @@ This repo ships two things, released **together** from a single version stream:
 
 ## The version stream
 
-Git tags (`v2.2.0`, …) with a moving major tag (`@v2`) drive both. Cut a release by
-running the **Release** workflow (`workflow_dispatch`, bugfix/feature/major). It:
+Git tags (`v2.2.0`, …) with a moving major tag (`@v2`) drive both. A release runs in two
+halves, because `main` is protected — see [Why a PR](#why-a-pr) below.
 
-1. computes the next version from the latest tag,
+**1. Run the `Release` workflow** (`workflow_dispatch`, bugfix/feature/major). It:
+
+1. computes the next version from the latest tag, and refuses if that tag already exists,
 2. rolls the `CHANGES.md` `## [Unreleased]` section into a dated version section,
 3. **rewrites `.claude-plugin/plugin.json` to the same version**,
-4. commits `CHANGES.md` + `plugin.json`, tags, and moves `@v2`.
+4. pushes a `release/vX.Y.Z` branch and opens a PR.
+
+Nothing is tagged or published yet. Closing the PR cancels the release.
+
+**2. Review the changelog and merge the PR.** That triggers `Publish release`, which
+reads the version back out of `plugin.json`, tags it, moves `@vX`, and publishes the
+GitHub release with the notes from `CHANGES.md`.
+
+Publishing is idempotent: if the version in `plugin.json` is already tagged it does
+nothing. Re-runs, manual dispatches and unrelated pushes to `main` are all harmless.
+
+### Why a PR
+
+`main` is protected by a repository ruleset, and the built-in `GITHUB_TOKEN` **cannot** be
+given a bypass — the bypass list accepts users, teams, and GitHub Apps, and the Actions
+token is none of those. The alternatives were a GitHub App or a deploy key, i.e. a
+credential to store and rotate so a workflow could push a single commit. Landing the
+release through a PR instead needs no credential and works with the protection rather
+than around it. Tagging is unaffected: the ruleset targets branches, and tags live in a
+separate ref namespace.
 
 `plugin.json` remains the single source of truth for the plugin version — Claude Code
 resolves `plugin.json → marketplace entry → commit SHA`, and `plugin.json` wins. The
@@ -26,8 +47,8 @@ version lines cannot drift apart.
 ### Releasing a plugin or skill change
 
 1. Make the change under `skills/` and merge it to `main`.
-2. Run the **Release** workflow. It bumps `plugin.json` for you — there is no
-   hand-written bump commit any more.
+2. Run the **Release** workflow, then merge the release PR it opens. `plugin.json` is
+   bumped for you — there is no hand-written bump commit any more.
 3. Users run `/plugin marketplace update` then `/plugin update cmk-oposs-plugin`.
 
 Nothing else is needed here. Claude only re-resolves plugin versions when it re-fetches
