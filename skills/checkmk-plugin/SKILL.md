@@ -65,11 +65,21 @@ your-plugin-repo/
 \-- .github/workflows/release.yml     # CI/CD
 ```
 
-**Required symlink** (prevents production path issues):
-```bash
-mkdir -p ./local/lib/python3/cmk
-ln -s python3/cmk ./local/lib/check_mk
+**Do NOT create a `local/lib/check_mk` symlink.** Pick one lib layout and use it alone —
+`local/lib/python3/cmk/` (recommended) *or* `local/lib/check_mk/`. `mkp-builder.py`
+rejects a repo where both exist, and because `pathlib.is_dir()` follows symlinks, a
+symlink counts as the second directory:
+
 ```
+[ERROR] Conflicting directory structures found: both '.../local/lib/check_mk' and
+'.../local/lib/python3/cmk' exist as directories. Please use either the check_mk/
+structure or the python3/cmk/ structure, not both.
+```
+
+Without `--verbose` this surfaces only as exit 1 with no message, which is painful to
+diagnose. The symlink is also unnecessary: the builder reads bakery plugins from
+`local/lib/python3/cmk/base/cee/plugins/bakery/` and rewrites them to the production
+`check_mk/...` path inside the MKP for you.
 
 ### Entry-Point Variable Prefixes (MANDATORY)
 
