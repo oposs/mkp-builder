@@ -10,6 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New
 
 ### Changed
+- Renamed the release workflows for what they actually do: `Release` →
+  **Create release PR** (`create-release-pr.yml`) and `Publish release` →
+  **Release publisher** (`release-publisher.yml`). Since 2.2.1 split the release in two,
+  the old names read like two ways to do the same thing, when only one is ever the right
+  button to press.
+- **Release publisher** no longer has a `workflow_dispatch` trigger. Publishing should be
+  a consequence of merging a release PR, not something anyone can start from a dropdown;
+  with `main` protected against direct pushes, merging a PR that changes `plugin.json` is
+  now the only route to a release. This costs no recovery: a failed run is re-run from the
+  Actions UI regardless of trigger, and because the version is read from `plugin.json`
+  rather than from run inputs, a re-run is faithful to the original attempt.
 
 ### Fixed
 
