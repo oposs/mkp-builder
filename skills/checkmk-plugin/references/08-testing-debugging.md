@@ -1,4 +1,75 @@
 # CheckMK Plugin Testing and Debugging
+
+## Setting Up: Making `cmk` Importable
+
+The unit-test patterns further down import `cmk.agent_based.v2` and friends. Outside a
+Checkmk installation those packages do not exist, so **none of it runs** until the harness
+is in place. Install it first:
+
+```bash
+mkdir -p tests
+cp -r <skill-dir>/assets/tests/.              tests/
+cp    <skill-dir>/assets/pytest.ini           pytest.ini
+cp    <skill-dir>/assets/requirements-dev.txt requirements-dev.txt
+echo '.cmk-api/' >> .gitignore
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+### What it does
+
+`tests/conftest.py` fetches the real Checkmk API, pinned to the `CMK_VERSION` constant at
+the top of that file, and caches it under the gitignored `.cmk-api/`:
+
+```python
+CMK_VERSION = "2.3.0"   # the Checkmk version this plugin targets
+```
+
+It is a blobless sparse clone of four packages — `cmk-agent-based`, `cmk-graphing`,
+`cmk-rulesets`, `cmk-server-side-calls` — roughly 7 MB and a second or two. Nothing is
+installed: they are namespace packages, so putting their directories on `sys.path` is
+enough.
+
+`conftest.py` also puts every `local/lib/python3/**/libexec` directory on the path, because
+libexec helper modules import each other by bare name — that is how Checkmk ships and runs
+them. Without it, a plugin whose agent is split across several files cannot be imported.
+
+### Why not hand-written stubs
+
+Because a stub only ever catches the API calls somebody remembered to model. Measured on two
+real plugins:
+
+| | hand-written stubs | real cmk @ 2.3.0 |
+|---|---|---|
+| `cmk-oposs_pbs` (where the stubs came from) | 8/10 modules | **10/10** |
+| `cmk-oposs_zpool_iostat` | 3/7 modules | **7/7** |
+| API surface to maintain by hand | **123 names** | **4 names** |
+
+Pinning a real version is also what makes the suite able to *report* drift. Point the same
+harness at Checkmk 2.2.0 and 5 of 7 modules fail, naming exactly what moved. Raise
+`CMK_VERSION` when you upgrade, and CI tells you what to fix before a user finds it.
+
+### The two traps
+
+**`tests/cmk_stubs/` must stay a namespace package.** It exists for the single API that
+cannot be pulled: the enterprise agent bakery (`cmk.base.plugins.bakery.bakery_api.v1`),
+which imports `cmk.utils` from the Checkmk monolith rather than the clean API packages. If
+you add a `cmk/__init__.py` anywhere in that tree it stops merging with the real `cmk` and
+starts shadowing it — 5 of 7 modules fail, with errors that look like the real API is broken.
+
+**The Checkmk API cannot go in `requirements-dev.txt`.** pip cannot install it from git: the
+Checkmk repository has a submodule the public cannot read, so
+`pip install "cmk-graphing @ git+https://github.com/Checkmk/checkmk.git@2.3.0#subdirectory=packages/cmk-graphing"`
+spends 65 seconds and then fails on `Repository not found`. That is precisely why
+`conftest.py` fetches it directly. Put your plugin's own third-party imports there instead
+(`requests`, `pydantic`, ...) — CI installs that file when it exists.
+
+### The smoke test
+
+`tests/test_smoke.py` imports every module under `local/lib/python3/`. It is the floor, not
+the ceiling: it catches a check referencing an API that moved. Build real unit tests on top
+of it using the patterns below.
+
 ## Troubleshooting Guide
 
 ### Essential Debug Commands
