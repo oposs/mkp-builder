@@ -8,11 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
-- The skill now ships a test harness. A plugin repo can run pytest against the real Checkmk API, pulled from Checkmk and pinned to the version the plugin targets, instead of against hand-written stubs.
 
 ### Changed
 
 ### Fixed
+
+## 2.3.0 - 2026-08-20
+### New
+- The skill now ships a test harness. A plugin repo can run pytest against the real Checkmk API, pulled from Checkmk and pinned to the version the plugin targets, instead of against hand-written stubs.
 
 ## 2.2.2 - 2026-08-17
 ### Changed
