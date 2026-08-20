@@ -191,26 +191,37 @@ Use the provided `build-mkp.sh` script:
 
 ## Package Configuration
 
-### `.build-mkprc` Format
+### `.mkp-builder.ini` Format
 
-```bash
-# Package Information (no version - comes from command line)
-PACKAGE_NAME="plugin_name"
-PACKAGE_TITLE="Human Readable Title" 
-PACKAGE_AUTHOR="Author Name <email@domain.com>"
-PACKAGE_DESCRIPTION="Multi-line package description"
+An INI file with a single `[package]` section. These are the only keys the builder
+reads (`mkp-builder.py`, `key_map`); anything else in the section is ignored.
 
-# Checkmk Compatibility
-CMK_MIN_VERSION="2.3.0p1"
-CMK_PACKAGED_VERSION="2.3.0p34"
+```ini
+[package]
+# Package information
+name = my_awesome_plugin
+title = My Awesome Checkmk Plugin
+author = Your Name <your.email@example.com>
+description = A plugin that monitors awesome things.
+    Continuation lines are indented.
+
+# Checkmk compatibility
+version.min_required = 2.3.0p1
+version.packaged = 2.3.0p34
+version.usable_until =
 
 # Optional
-DOWNLOAD_URL=""
-VERSION_USABLE_UNTIL=""
+download_url = https://github.com/yourusername/your-plugin-repo
 
-# Build Options
-VALIDATE_PYTHON="yes"
+# Build options
+validate_python = true
 ```
+
+There is no `version` key: the version is supplied by the build (the `version` input of
+the action, which the release workflow feeds from the tag), so the file never has to be
+edited to cut a release.
+
+`.mkp-builder.ini.example` in this repository is a copy-paste starting point.
 
 ## File Mapping Logic
 
