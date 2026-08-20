@@ -7,8 +7,6 @@
 !/.github
 !/.mkp-builder.ini.example
 !/.clinerules
-!/skills
-!/.claude-plugin
 *~
 *.swp
 *.bak
