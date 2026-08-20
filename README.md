@@ -18,6 +18,13 @@ A reusable GitHub Action for building Checkmk MKP (Monitoring Konfiguration Pack
 - 🧹 **Clean**: No permanent changes to your repository
 - ⚡ **Fast**: Downloads build tools on-demand, no bloated containers
 
+## MKP package format
+
+[`cmk-mkp-format.md`](cmk-mkp-format.md) is the reference for what an `.mkp` actually is:
+the tar-of-tars layout, the `info` and `info.json` metadata, how files under `local/` map
+into each component archive, and the `.mkp-builder.ini` keys this action reads. It lives
+here because this action is what produces that format.
+
 ## Related projects
 
 This repository is **only** the packaging action. Two companions do the rest:
