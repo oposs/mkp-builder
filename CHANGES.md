@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- The Checkmk plugin development skill has moved to its own repository,
+  `oposs/cmk-oposs-plugin`. This repository is now only the packaging action. Holding both
+  behind one version number misfired in both directions: v2.2.2 changed five action files
+  and no skill files while telling every skill user their skill had updated, and v2.3.0
+  changed only skill files while cutting an action release whose code was byte-identical.
+- The release version is read from `CHANGES.md` instead of `.claude-plugin/plugin.json`,
+  which went with the skill. A GitHub Action is not a Claude plugin and has no reason to
+  carry a plugin manifest.
+
 ### New
 
 ### Changed

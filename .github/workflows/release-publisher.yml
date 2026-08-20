@@ -1,21 +1,21 @@
 name: Release publisher
 
 # Second half of the release. "Create release PR" prepares a PR; merging it lands the
-# rolled CHANGES.md and the synced plugin.json on main, and that merge triggers this.
+# rolled CHANGES.md on main, and that merge triggers this.
 #
 # main is protected by a ruleset and GITHUB_TOKEN cannot be granted a bypass (the bypass
 # list takes users, teams and GitHub Apps -- not the built-in Actions token). So nothing
 # here pushes to a branch. Tagging is unaffected: the ruleset targets branches, and tags
 # are a separate ref namespace.
 #
-# The version is read from .claude-plugin/plugin.json rather than passed between jobs,
+# The version is read from CHANGES.md rather than passed between jobs,
 # which makes this idempotent: if that version is already tagged there is nothing to do.
 # A re-run or an unrelated push to main is therefore harmless.
 #
 # There is deliberately no workflow_dispatch. Publishing should be a consequence of
 # merging a release PR, never something anyone starts by hand. Combined with the branch
 # ruleset, which forbids pushing to main directly, that leaves exactly one way to reach
-# this workflow: merge a PR that changes plugin.json. Recovery does not need a manual
+# this workflow: merge a PR that changes CHANGES.md. Recovery does not need a manual
 # trigger either -- a failed run can be re-run from the Actions UI, and because the
 # version comes from the repository rather than from run inputs, the re-run does exactly
 # what the original attempt would have done.
@@ -24,7 +24,7 @@ on:
   push:
     branches: [main]
     paths:
-      - '.claude-plugin/plugin.json'
+      - 'CHANGES.md'
 
 concurrency:
   group: release-publisher
@@ -50,9 +50,13 @@ jobs:
           set -euo pipefail
           echo "::group::Determining version"
 
-          VERSION_NO_V=$(jq -r '.version' .claude-plugin/plugin.json)
-          if [[ -z "$VERSION_NO_V" || "$VERSION_NO_V" == "null" ]]; then
-            echo "::error title=No version::.claude-plugin/plugin.json has no version"
+          # CHANGES.md is the source of truth. The first heading carrying a
+          # semver is the newest released section; `## [Unreleased]` has no
+          # digits and is skipped, so an unreleased-only changelog matches
+          # nothing and this fails rather than tagging something arbitrary.
+          VERSION_NO_V=$(grep -m1 -oP '^##\s+\Kv?[0-9]+\.[0-9]+\.[0-9]+' CHANGES.md || true)
+          if [[ -z "$VERSION_NO_V" ]]; then
+            echo "::error title=No version::CHANGES.md has no released version section"
             exit 1
           fi
           VERSION="v${VERSION_NO_V}"

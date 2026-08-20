@@ -18,39 +18,25 @@ A reusable GitHub Action for building Checkmk MKP (Monitoring Konfiguration Pack
 - 🧹 **Clean**: No permanent changes to your repository
 - ⚡ **Fast**: Downloads build tools on-demand, no bloated containers
 
-## Claude Code Plugin: Checkmk Plugin Development Guide
+## Related projects
 
-This repo includes a comprehensive Checkmk 2.3.x plugin development guide
-as a [Claude Code](https://claude.com/claude-code) skill. Once installed,
-Claude will automatically use the guide whenever you ask it to build, upgrade,
-or package Checkmk plugins.
+This repository is **only** the packaging action. Two companions do the rest:
 
-### Install
+- **[`oposs/cmk-oposs-plugin`](https://github.com/oposs/cmk-oposs-plugin)** — the Claude Code
+  skill for building, upgrading and packaging Checkmk 2.3.x plugins. It used to live here,
+  which meant a skill change cut a release of this action and an action change told skill
+  users their skill had updated. Install it with:
 
-Add the OPOSS marketplace and install the plugin:
+  ```
+  /plugin marketplace add oposs/claude-plugins
+  /plugin install cmk-oposs-plugin
+  ```
 
-```
-/plugin marketplace add oposs/claude-plugins
-/plugin install cmk-oposs-plugin@oposs-plugins
-```
+- **[`oposs/repo-infra`](https://github.com/oposs/repo-infra)** — release flow, changelog
+  handling, branch protection and CI. It detects a Checkmk plugin from `.mkp-builder.ini`
+  and generates a `ci.yml` that calls this action.
 
-### What it covers
-
-- Agent-based check plugins, SNMP plugins, special agents
-- Metrics, graphing, and perfometers
-- Rulesets and GUI configuration
-- Bakery integration for automatic agent deployment
-- Notification plugins (Slack, Teams, webhooks, etc.)
-- Metric migration (renaming metrics while preserving RRD history)
-- MKP packaging with the `oposs/mkp-builder` GitHub Action
-
-### Example prompts
-
-- *"Build an SNMP plugin to monitor my Liebert UPS"*
-- *"Upgrade my old v1 check plugin to the v2 API"*
-- *"Create a notification plugin that sends alerts to Teams"*
-- *"Add graphs and configurable thresholds to my plugin"*
-- *"Package my plugin as an MKP with a GitHub Actions release workflow"*
+The seam between the three is one line: `uses: oposs/mkp-builder@v2`.
 
 ## Quick Start
 
