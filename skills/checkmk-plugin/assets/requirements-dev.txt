@@ -1,0 +1,10 @@
+# Test-only dependencies. The Checkmk API itself is NOT listed here: pip
+# cannot install it from git (the Checkmk repository has a submodule the
+# public cannot read), so tests/conftest.py fetches it directly instead.
+pytest>=8
+
+# cmk-agent-based declares pydantic as a runtime dependency.
+pydantic>=2
+
+# Add whatever this plugin imports at runtime, e.g.:
+# requests>=2.31
