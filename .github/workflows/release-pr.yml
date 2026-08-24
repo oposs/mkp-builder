@@ -1,0 +1,222 @@
+name: Create release PR
+# repo-infra: release-pr v1
+#
+# Half one of a two-step release. main is protected and GITHUB_TOKEN cannot be
+# given a ruleset bypass — the bypass list takes users, teams and GitHub Apps,
+# and the Actions token is none of those. So the release lands through a pull
+# request like any other change. Merging it triggers release-publish.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: Release type
+        required: true
+        default: bugfix
+        type: choice
+        options:
+          - bugfix
+          - feature
+          - major
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  # To read this run's own job ids, so the guard can exclude itself.
+  actions: read
+
+jobs:
+  release-pr:
+    name: Prepare the release pull request
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Guard — right branch, green checks
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const lib = `${process.env.GITHUB_WORKSPACE}/.github/workflows/lib`;
+            const checks = require(`${lib}/checks.js`);
+
+            const def = context.payload.repository.default_branch;
+            if (context.ref !== `refs/heads/${def}`) {
+              core.setFailed(
+                `Releases run from ${def} only. This run is on ${context.ref}.`
+              );
+              return;
+            }
+
+            // Required status checks cannot be used on the ruleset (they would
+            // deadlock the release PR), so the tests are verified here, on the
+            // commit, before any PR exists.
+            // This job is itself a check run on this commit, so the guard has
+            // to exclude its own jobs or it waits for the job doing the
+            // waiting -- 15 minutes, then "Still running: Prepare the release
+            // pull request". A check run's id is its Actions job id, so this
+            // run's job list is exactly the set to ignore.
+            const { data: own } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+              per_page: 100,
+            });
+
+            const state = await checks.waitForChecks(github, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: context.sha,
+            }, { ignoreCheckRunIds: own.jobs.map((j) => j.id) });
+
+            if (state.timedOut) {
+              core.setFailed(
+                `Timed out waiting for checks on ${context.sha}. Still running: `
+                + state.pending.map((c) => c.name).join(', ')
+              );
+              return;
+            }
+            if (state.total === 0) {
+              core.setFailed(
+                `No checks ran on ${context.sha}. Refusing to release a commit `
+                + 'that nothing tested.'
+              );
+              return;
+            }
+            if (state.failed.length > 0) {
+              core.setFailed(
+                'Failing checks on this commit: '
+                + state.failed.map((c) => c.name).join(', ')
+              );
+              return;
+            }
+
+            core.notice(`All ${state.total} checks green on ${context.sha}.`);
+
+      - name: Compute the version and rewrite the files
+        id: prepare
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const ws = process.env.GITHUB_WORKSPACE;
+            const lib = `${ws}/.github/workflows/lib`;
+            const versionLib = require(`${lib}/version.js`);
+            const changesLib = require(`${lib}/changes.js`);
+            const bumpLib = require(`${lib}/bump.js`);
+
+            const config = JSON.parse(
+              fs.readFileSync(`${ws}/.github/repo-infra.json`, 'utf8')
+            );
+
+            const refs = await github.paginate(github.rest.git.listMatchingRefs, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'tags/v',
+              per_page: 100,
+            });
+            const tags = refs.map((r) => r.ref.replace('refs/tags/', ''));
+            const latest = versionLib.latest(tags);
+            const version = versionLib.next(latest, context.payload.inputs.release_type);
+
+            if (tags.includes(`v${version}`)) {
+              core.setFailed(`v${version} is already tagged.`);
+              return;
+            }
+
+            const fileIO = {
+              read: (p) => fs.readFileSync(path.join(ws, p), 'utf8'),
+              write: (p, c) => fs.writeFileSync(path.join(ws, p), c, 'utf8'),
+            };
+
+            const date = new Date().toISOString().slice(0, 10);
+            // roll throws when [Unreleased] is empty, which is the hard backstop
+            // behind the required changelog gate.
+            fileIO.write('CHANGES.md', changesLib.roll(fileIO.read('CHANGES.md'), version, date));
+            bumpLib.bumpAll(config.version_files, version, fileIO);
+
+            core.setOutput('version', version);
+            core.setOutput('date', date);
+            core.notice(`Preparing ${latest} -> v${version} (${date}).`);
+
+      # Ecosystems whose lockfile can only be rewritten by their own tool run
+      # here, between the rewrite and the commit. repo-infra has none. A Rust
+      # repository gets, verbatim:
+      #
+      #   - uses: dtolnay/rust-toolchain@stable
+      #   - run: cargo update --workspace
+      #
+      # Not --offline: the resolve needs the registry. Not || true: swallowing
+      # that failure is what tagged mdmost v0.1.1 with an inconsistent lockfile.
+
+      - name: Commit and open the pull request
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const ws = process.env.GITHUB_WORKSPACE;
+            const commitLib = require(`${ws}/.github/workflows/lib/commit.js`);
+
+            const config = JSON.parse(
+              fs.readFileSync(`${ws}/.github/repo-infra.json`, 'utf8')
+            );
+            const version = '${{ steps.prepare.outputs.version }}';
+            const date = '${{ steps.prepare.outputs.date }}';
+            const branch = `release/v${version}`;
+
+            // A fixed list, read off disk after every step that may have touched
+            // it. This is what lets a tool step (cargo update) participate without
+            // the commit step needing to know it ran.
+            const paths = ['CHANGES.md', ...config.version_files.map((f) => f.path)];
+            const files = paths.map((p) => ({
+              path: p,
+              content: fs.readFileSync(path.join(ws, p), 'utf8'),
+            }));
+
+            await commitLib.commitFiles(github, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              branch,
+              baseSha: context.sha,
+              message: `Release v${version}`,
+              files,
+            });
+
+            const body = [
+              'Prepared by the **Create release PR** workflow.',
+              '',
+              `- rolls \`CHANGES.md\` \`[Unreleased]\` into \`## ${version} - ${date}\``,
+              `- sets ${config.version_files.map((f) => `\`${f.path}\``).join(', ')} to \`${version}\``,
+              '',
+              'Review the changelog, then merge. Merging triggers **Release',
+              `publisher**, which tags \`v${version}\` and publishes the release.`,
+              '',
+              'Nothing is tagged or published until this is merged; closing it',
+              'cancels the release.',
+            ].join('\n');
+
+            const { data: pr } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              head: branch,
+              base: context.payload.repository.default_branch,
+              title: `Release v${version}`,
+              body,
+            });
+
+            core.notice(`Release pull request opened: ${pr.html_url}`);
+            await core.summary
+              .addHeading(`Release v${version} prepared`)
+              .addLink('Review and merge to publish', pr.html_url)
+              .write();

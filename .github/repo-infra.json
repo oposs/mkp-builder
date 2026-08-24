@@ -1,0 +1,7 @@
+{
+  "ecosystems": ["github-action"],
+  "moving_major_tag": true,
+  "version_files": [],
+  "publish": [],
+  "build": []
+}

@@ -1,0 +1,75 @@
+name: Changelog
+# repo-infra: changelog v1
+#
+# Required, not advisory (spec D2). Being required is only safe because the
+# escape hatch below is a JOB-level `if:` — a job skipped by a condition
+# reports Success, while a WORKFLOW skipped by a paths/branches filter stays
+# Pending forever and blocks the merge. Never add paths: or paths-ignore: to
+# this workflow (spec D13).
+#
+# The release PR is not blocked by being GITHUB_TOKEN-authored: its runs are
+# created in an approval-required state and start when a maintainer clicks
+# "Approve workflows to run". This job then skips itself on release/* anyway.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # No `name:` — the check context is the job id, `changelog-updated`, which is
+  # what the ruleset requires. Renaming this job silently un-requires the check.
+  changelog-updated:
+    # release/* is exempt because the release workflow writes CHANGES.md itself.
+    # The no-changelog label is the deliberate escape hatch for typo and CI-only
+    # changes — without it every weekly dependabot PR is blocked, since this
+    # check is required. The label must exist in the repository (Task 3): a
+    # label that does not exist is silently ignored by dependabot.
+    if: >-
+      !startsWith(github.head_ref, 'release/') &&
+      !contains(github.event.pull_request.labels.*.name, 'no-changelog')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const changes = require(
+              `${process.env.GITHUB_WORKSPACE}/.github/workflows/lib/changes.js`
+            );
+
+            // Both sides come from the API rather than from the checkout. On a
+            // pull_request event the checkout is the merge commit, and comparing
+            // against a base that is not in a shallow clone needs fetch-depth: 0.
+            // Two getContent calls avoid both problems and make it unambiguous
+            // which two refs are being compared.
+            const read = async (ref) => {
+              const { data } = await github.rest.repos.getContent({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                path: 'CHANGES.md',
+                ref,
+              });
+              return Buffer.from(data.content, 'base64').toString('utf8');
+            };
+
+            const pr = context.payload.pull_request;
+            const base = changes.unreleasedBlock(await read(pr.base.sha));
+            const head = changes.unreleasedBlock(await read(pr.head.sha));
+
+            if (base === head) {
+              core.setFailed(
+                "This pull request adds nothing under '## [Unreleased]' in "
+                + 'CHANGES.md. Add an entry describing the change, or label the '
+                + "pull request 'no-changelog' if it genuinely needs none."
+              );
+              return;
+            }
+
+            core.notice('CHANGES.md [Unreleased] was updated.');
