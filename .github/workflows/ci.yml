@@ -12,6 +12,24 @@ permissions:
 
 jobs:
 
+  # repo-infra: ci-lib v1
+  lib:
+    name: Workflow library tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # The release logic is a library, so it is tested like one. Before this,
+      # the changelog roller was a Perl program inside a YAML string whose only
+      # test was cutting a release.
+      - name: Run the workflow library tests
+        run: node --test .github/workflows/lib/*.test.js
+
   # repo-infra: ci-github-action v1
   action-manifest:
     name: Action manifest is valid
@@ -92,7 +110,7 @@ jobs:
   # like it is working.
   ci-passed:
     if: always()
-    needs: [action-manifest, action-test]
+    needs: [lib, action-manifest, action-test]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
