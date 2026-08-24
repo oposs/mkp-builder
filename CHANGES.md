@@ -8,10 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+- CI validates `action.yml` against every workflow that calls it, and fails on
+  an input that is passed but not declared, or required but not passed. GitHub
+  only warns about the first and does not enforce the second.
 
 ### Changed
+- Infrastructure now comes from the `oposs/repo-infra` standard: CI, the
+  changelog check, dependabot and both release workflows. The release flow is
+  unchanged in shape — run `Create release PR`, review, merge — and `v2` still
+  moves on every release.
+- The action's own tests moved to `.github/workflows/action-test.yml` and are
+  called by `ci.yml` instead of triggering themselves.
 
 ### Fixed
+- The "all inputs" test passed `cmk-min-version` and `cmk-packaged-version`,
+  which `action.yml` does not declare, so both values were dropped and neither
+  was ever tested. They are now `version-min-required` and `version-packaged`.
+- The test config was written as `.mkp-builderrc` in shell syntax. The script
+  reads `.mkp-builder.ini` and parses it as INI, so the file was never read and
+  the package name came from auto-detection. The test now writes a real config
+  and checks that its title reaches the built package.
 
 ## 2.3.1 - 2026-08-20
 ### Changed
