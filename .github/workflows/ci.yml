@@ -1,0 +1,100 @@
+name: CI
+# repo-infra: ci v1
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+
+  # repo-infra: ci-github-action v1
+  action-manifest:
+    name: Action manifest is valid
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+
+      - run: pip install pyyaml
+
+      # GitHub does not fail a run when a workflow passes an input the action
+      # never declared: it prints `Unexpected input(s)` as a warning, drops the
+      # value and carries on. A test that passes such an input is green while
+      # testing nothing -- which is exactly how this job was found to be worth
+      # having. Both directions of the mismatch are silent, so both are checked.
+      - name: Check action.yml against its local callers
+        run: |
+          python3 - <<'PY'
+          import pathlib, sys, yaml
+
+          action = yaml.safe_load(pathlib.Path("action.yml").read_text(encoding="utf-8")) or {}
+          problems = []
+
+          for field in ("name", "description", "runs"):
+              if not action.get(field):
+                  problems.append("action.yml: %s is missing or empty" % field)
+          if not (action.get("runs") or {}).get("using"):
+              problems.append("action.yml: runs.using is missing")
+
+          inputs = action.get("inputs") or {}
+          declared = set(inputs)
+          required = {n for n, s in inputs.items() if (s or {}).get("required") is True}
+
+          # The repository's own root action, however a step spells it. A step
+          # reaching a *nested* local action is that action's business, not
+          # this one's.
+          root = {".", "./", "./."}
+          for wf in sorted(pathlib.Path(".github/workflows").glob("*.yml")):
+              doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+              for job_id, job in (doc.get("jobs") or {}).items():
+                  for step in ((job or {}).get("steps") or []):
+                      uses = (step or {}).get("uses")
+                      if not isinstance(uses, str) or uses.strip() not in root:
+                          continue
+                      given = set((step.get("with") or {}))
+                      where = "%s: job %s" % (wf.as_posix(), job_id)
+                      for key in sorted(given - declared):
+                          problems.append(
+                              "%s: passes %r, which action.yml does not declare" % (where, key))
+                      for key in sorted(required - given):
+                          problems.append(
+                              "%s: omits required input %r" % (where, key))
+
+          if problems:
+              sys.exit("\n".join(problems))
+          print("action.yml is valid; every local caller matches it")
+          PY
+
+  # The project brings the test, the standard brings the seam (D20). The path
+  # and the trigger are fixed by the contract in references/conventions.md, so
+  # this job stays a literal file with nothing substituted into it -- repo-infra
+  # never learns what inputs this particular action takes.
+  action-test:
+    uses: ./.github/workflows/action-test.yml
+
+  # The single context the ruleset requires (spec D2). It exists so branch
+  # protection can name one check that means "this repository's CI passed",
+  # whatever this repository's jobs happen to be. The needs list is generated
+  # by the assembler from the blocks that went into this file.
+  #
+  # `if: always()` is load-bearing. Without it this job is *skipped* when a
+  # dependency fails, and a skipped job reports Success -- so the required
+  # check would go green on a red build. It fails open, silently, and looks
+  # like it is working.
+  ci-passed:
+    if: always()
+    needs: [action-manifest, action-test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

@@ -1,11 +1,9 @@
 name: Test Action
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
+# The project's own test toolchain, called by ci.yml's `action-test` job.
+# `workflow_call` is the only trigger on purpose: add push or pull_request and
+# every run happens twice, once here and once through ci.yml.
+on: [workflow_call]
 
 permissions:
   contents: read
