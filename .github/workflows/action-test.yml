@@ -54,15 +54,18 @@ jobs:
           )
           EOF
           
-          # Create test config
-          cat > .mkp-builderrc << 'EOF'
-          PACKAGE_NAME="test_plugin"
-          PACKAGE_TITLE="Test Plugin"
-          PACKAGE_AUTHOR="Test Author <test@example.com>"
-          PACKAGE_DESCRIPTION="A test plugin for CI/CD"
-          CMK_MIN_VERSION="2.3.0p1"
-          CMK_PACKAGED_VERSION="2.3.0p34"
-          VALIDATE_PYTHON="yes"
+          # Create test config. The name and the format both matter:
+          # mkp-builder.py reads `.mkp-builder.ini` and parses it with
+          # configparser, so a shell-style `.mkp-builderrc` is read by nothing.
+          cat > .mkp-builder.ini << 'EOF'
+          [package]
+          name = test_plugin
+          title = Test Plugin From Config
+          author = Test Author <test@example.com>
+          description = A test plugin for CI/CD
+          version.min_required = 2.3.0p1
+          version.packaged = 2.3.0p34
+          validate_python = true
           EOF
 
       - name: Test Action
@@ -108,6 +111,15 @@ jobs:
           # Verify expected files are in the package
           if ! tar -tzf "${{ steps.test.outputs.package-file }}" | grep -q "info$"; then
             echo "::error::Package missing info file!"
+            exit 1
+          fi
+
+          # And that the config file was actually read: the title is set only
+          # in .mkp-builder.ini, so finding it in `info` proves the config path
+          # ran rather than the defaults.
+          if ! tar -xzOf "${{ steps.test.outputs.package-file }}" info | grep -q "Test Plugin From Config"; then
+            echo "::error::Package info does not carry the title from .mkp-builder.ini!"
+            tar -xzOf "${{ steps.test.outputs.package-file }}" info
             exit 1
           fi
           
@@ -164,8 +176,8 @@ jobs:
           title: 'Advanced Test Plugin'
           author: 'Test Developer <dev@example.com>'
           description: 'An advanced plugin for comprehensive testing'
-          cmk-min-version: '2.3.0p1'
-          cmk-packaged-version: '2.3.0p34'
+          version-min-required: '2.3.0p1'
+          version-packaged: '2.3.0p34'
           version-usable-until: '2.4.0'
           download-url: 'https://github.com/test/advanced-plugin'
           output-dir: 'dist'
