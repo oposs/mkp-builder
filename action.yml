@@ -92,7 +92,10 @@ runs:
       if: ${{ inputs.validate-python == 'true' }}
       uses: actions/setup-python@v7
       with:
-        python-version: '3.11'
+        # The syntax check is ast.parse under this interpreter, so it must
+        # be the Python that Checkmk itself runs: 3.12 for 2.3 and 2.4.
+        # An older one rejects valid plugins that use 3.12 syntax.
+        python-version: '3.12'
 
     - name: Verify MKP build script
       shell: bash
@@ -164,26 +167,15 @@ runs:
         # Run the versioned build script directly
         "$MKP_SCRIPT" --github-action-mode "${BUILD_ARGS[@]}"
         
-        # Find the generated MKP file
-        MKP_FILE=$(find "${{ inputs.output-dir }}" -name "*.mkp" -type f | head -1)
-        
-        if [[ -z "$MKP_FILE" ]]; then
-          echo "::error::No MKP file found after build"
+        # mkp-builder.py writes package-file, package-name and package-size
+        # to $GITHUB_OUTPUT itself: package-file is the exact file it just
+        # wrote, not whatever .mkp a search of output-dir finds first.
+        if ! grep -q '^package-file=' "$GITHUB_OUTPUT"; then
+          echo "::error::mkp-builder.py did not report a package file"
           exit 1
         fi
-        
-        # Extract package name from filename
-        PACKAGE_NAME=$(basename "$MKP_FILE" .mkp | sed 's/-[0-9].*//')
-        
-        # Get package size
-        PACKAGE_SIZE=$(du -h "$MKP_FILE" | cut -f1)
-        
-        # Set outputs
-        echo "package-file=$MKP_FILE" >> $GITHUB_OUTPUT
-        echo "package-name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
-        echo "package-size=$PACKAGE_SIZE" >> $GITHUB_OUTPUT
-        
-        echo "::notice::MKP package built successfully: $MKP_FILE ($PACKAGE_SIZE)"
+
+        echo "::notice::MKP package built successfully"
         echo "::endgroup::"
 
 branding:
