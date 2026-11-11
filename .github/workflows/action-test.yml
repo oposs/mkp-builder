@@ -35,6 +35,10 @@ jobs:
           cat > local/lib/python3/cmk_addons/plugins/test_plugin/agent_based/test_plugin.py << 'EOF'
           from cmk.agent_based.v2 import *
 
+          # Python 3.12 syntax (PEP 695). Checkmk 2.3 runs 3.12, so the
+          # syntax check must accept it.
+          type Section = list[list[str]]
+
           def discover_test_plugin(section):
               yield Service()
 
@@ -68,6 +72,11 @@ jobs:
           validate_python = true
           EOF
 
+          # A stale package from an earlier build in a subdirectory of the
+          # output dir. package-file must name the file just built, not this.
+          mkdir -p aaa-stale
+          echo stale > aaa-stale/old_plugin-0.0.1.mkp
+
       - name: Test Action
         id: test
         uses: ./
@@ -84,6 +93,16 @@ jobs:
           # Verify the package exists
           if [[ ! -f "${{ steps.test.outputs.package-file }}" ]]; then
             echo "::error::Package file not found!"
+            exit 1
+          fi
+
+          if [[ "${{ steps.test.outputs.package-file }}" != "test_plugin-1.0.0-test.mkp" ]]; then
+            echo "::error::package-file is not the package just built!"
+            exit 1
+          fi
+
+          if [[ "${{ steps.test.outputs.package-name }}" != "test_plugin" ]]; then
+            echo "::error::package-name is not test_plugin!"
             exit 1
           fi
           

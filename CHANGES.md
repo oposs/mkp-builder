@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   called by `ci.yml` instead of triggering themselves.
 
 ### Fixed
+- The `package-file` output could name an old `.mkp` from a subdirectory of
+  `output-dir` instead of the package just built, so a release step could
+  upload the wrong file. It now always names the built package, and
+  `package-size` reads like `864B` instead of `4.0K`.
+- `validate-python` rejected valid plugins that use Python 3.12 syntax such as
+  `type X = ...`, because it checked with Python 3.11. It now checks with 3.12,
+  the Python of Checkmk 2.3 and 2.4.
 - The "all inputs" test passed `cmk-min-version` and `cmk-packaged-version`,
   which `action.yml` does not declare, so both values were dropped and neither
   was ever tested. They are now `version-min-required` and `version-packaged`.
