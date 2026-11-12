@@ -26,11 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ignored when the ini set it too. The input or flag now wins, and the ini
   still wins over the built-in defaults; `validate-python: 'true'` leaves the
   decision to `validate_python` in the ini, as before.
-- `validate-python` accepted Python 3.12 syntax such as `type X = ...`,
-  `def f[T]()` or `f"{d["key"]}"` in packages whose `version-min-required` is
-  2.2, although Checkmk 2.2 runs Python 3.11 and cannot load them. It now
-  checks against the Python of `version-min-required` (3.11 for 2.2, 3.12 for
-  2.3 and 2.4) and names that version in the error.
+- `validate-python` rejected valid plugins that use Python 3.12 syntax such
+  as `type X = ...`, `def f[T]()` or `f"{d["key"]}"`, because it checked with
+  Python 3.11. It now checks against the Python of `version-min-required`
+  (3.12 for 2.3 and 2.4, 3.11 for 2.2, which still rejects that syntax) and
+  names that version in the error.
 - `validate-python` held Python agent plugins under
   `local/share/check_mk/agents/` to the Python of `version-min-required`,
   although they run with the Python of the monitored host. They are now only
@@ -39,9 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `output-dir` instead of the package just built, so a release step could
   upload the wrong file. It now always names the built package, and
   `package-size` reads like `864B` instead of `4.0K`.
-- `validate-python` rejected valid plugins that use Python 3.12 syntax such as
-  `type X = ...`, because it checked with Python 3.11. It now checks with 3.12,
-  the Python of Checkmk 2.3 and 2.4.
 - The "all inputs" test passed `cmk-min-version` and `cmk-packaged-version`,
   which `action.yml` does not declare, so both values were dropped and neither
   was ever tested. They are now `version-min-required` and `version-packaged`.
