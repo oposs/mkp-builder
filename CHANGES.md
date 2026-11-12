@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### New
+
+### Changed
+
+### Fixed
+
+## 2.4.0 - 2026-11-12
+### New
 - CI validates `action.yml` against every workflow that calls it, and fails on
   an input that is passed but not declared, or required but not passed. GitHub
   only warns about the first and does not enforce the second.
