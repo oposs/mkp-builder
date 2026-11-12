@@ -362,11 +362,11 @@ You can test the build script locally:
 
 ```bash
 # Download the script
-curl -sSL https://raw.githubusercontent.com/oposs/mkp-builder/main/mkp-builder.sh -o mkp-builder.sh
-chmod +x mkp-builder.sh
+curl -sSL https://raw.githubusercontent.com/oposs/mkp-builder/main/mkp-builder.py -o mkp-builder.py
+chmod +x mkp-builder.py
 
-# Run locally
-./mkp-builder.sh --version 1.0.0 --verbose
+# Run it in the plugin directory, the one that holds local/
+./mkp-builder.py --version 1.0.0 --verbose
 ```
 
 ## Version Pinning
