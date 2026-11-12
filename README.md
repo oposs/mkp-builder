@@ -134,7 +134,7 @@ jobs:
 | `download-url` | Download URL | ❌ | From config file |
 | `version-usable-until` | The last Checkmk version this plugin is compatible with | ❌ | From config file |
 | `output-dir` | Output directory | ❌ | `.` |
-| `validate-python` | Validate Python files | ❌ | `true` |
+| `validate-python` | Validate Python files; `true` leaves it to `validate_python` in the config file | ❌ | `true` |
 | `verbose` | Enable verbose output | ❌ | `false` |
 
 ## Outputs
@@ -147,7 +147,9 @@ jobs:
 
 ## Configuration File
 
-Create a `.mkp-builder.ini` file in your repository root for default values:
+Create a `.mkp-builder.ini` file in your repository root for default values.
+An input of the action, or a flag of `mkp-builder.py`, overrides the value
+from the file:
 
 ```ini
 [package]

@@ -131,6 +131,9 @@ class MKPBuilder:
         self.logger = Logger()
         self.work_dir = Path.cwd()
         self.config: Dict[str, Any] = DEFAULT_CONFIG.copy()
+        # Values given on the command line. build() applies them after the
+        # config file, so a flag beats the ini and the ini beats the defaults.
+        self.overrides: Dict[str, Any] = {}
         
     def load_config(self, config_file: Optional[Path] = None) -> None:
         """Load configuration from .mkp-builder.ini file"""
@@ -507,6 +510,7 @@ class MKPBuilder:
         
         # Load configuration
         self.load_config()
+        self.config.update(self.overrides)
         self.logger.info("Config loaded successfully")
         
         # Set defaults
@@ -606,34 +610,34 @@ def main() -> int:
         
         # Set configuration from command line arguments
         if args.version:
-            builder.config['version'] = args.version
+            builder.overrides['version'] = args.version
         if args.name:
-            builder.config['name'] = args.name
+            builder.overrides['name'] = args.name
         if args.title:
-            builder.config['title'] = args.title
+            builder.overrides['title'] = args.title
         if args.author:
-            builder.config['author'] = args.author
+            builder.overrides['author'] = args.author
         if args.description:
-            builder.config['description'] = args.description
+            builder.overrides['description'] = args.description
         if getattr(args, 'version_min_required'):
-            builder.config['version.min_required'] = getattr(args, 'version_min_required')
+            builder.overrides['version.min_required'] = getattr(args, 'version_min_required')
         if getattr(args, 'version_packaged'):
-            builder.config['version.packaged'] = getattr(args, 'version_packaged')
+            builder.overrides['version.packaged'] = getattr(args, 'version_packaged')
         if getattr(args, 'download_url'):
-            builder.config['download_url'] = getattr(args, 'download_url')
+            builder.overrides['download_url'] = getattr(args, 'download_url')
         if getattr(args, 'version_usable_until'):
-            builder.config['version.usable_until'] = getattr(args, 'version_usable_until')
+            builder.overrides['version.usable_until'] = getattr(args, 'version_usable_until')
         if args.output_dir:
-            builder.config['output_dir'] = args.output_dir
+            builder.overrides['output_dir'] = args.output_dir
         
         # Handle validation flags
         if args.validate:
-            builder.config['validate_python'] = True
+            builder.overrides['validate_python'] = True
         elif args.no_validate:
-            builder.config['validate_python'] = False
+            builder.overrides['validate_python'] = False
         
         if args.verbose:
-            builder.config['verbose'] = True
+            builder.overrides['verbose'] = True
         
         # Build the package
         output_file = builder.build()

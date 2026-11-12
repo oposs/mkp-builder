@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   called by `ci.yml` instead of triggering themselves.
 
 ### Fixed
+- A value in `.mkp-builder.ini` replaced the same value given as an action
+  input or a command-line flag, so `title: 'X'` or `--name x` was silently
+  ignored when the ini set it too. The input or flag now wins, and the ini
+  still wins over the built-in defaults; `validate-python: 'true'` leaves the
+  decision to `validate_python` in the ini, as before.
 - `validate-python` accepted Python 3.12 syntax such as `type X = ...`,
   `def f[T]()` or `f"{d["key"]}"` in packages whose `version-min-required` is
   2.2, although Checkmk 2.2 runs Python 3.11 and cannot load them. It now
