@@ -40,7 +40,7 @@ You can test the action locally by:
 2. **Copying your modified files** to the test repository
 3. **Running the build script directly**:
    ```bash
-   ./mkp-builder.sh --version 1.0.0-test --verbose
+   ./mkp-builder.py --version 1.0.0-test --verbose
    ```
 
 ### Testing in GitHub Actions

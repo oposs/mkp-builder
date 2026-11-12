@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   called by `ci.yml` instead of triggering themselves.
 
 ### Fixed
+- `validate-python` accepted Python 3.12 syntax such as `type X = ...`,
+  `def f[T]()` or `f"{d["key"]}"` in packages whose `version-min-required` is
+  2.2, although Checkmk 2.2 runs Python 3.11 and cannot load them. It now
+  checks against the Python of `version-min-required` (3.11 for 2.2, 3.12 for
+  2.3 and 2.4) and names that version in the error.
 - The `package-file` output could name an old `.mkp` from a subdirectory of
   `output-dir` instead of the package just built, so a release step could
   upload the wrong file. It now always names the built package, and

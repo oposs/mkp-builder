@@ -15,6 +15,7 @@ import shutil
 import sys
 import tarfile
 import tempfile
+import tokenize
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
@@ -30,6 +31,70 @@ DEFAULT_CONFIG = {
     'output_dir': '.',
     'verbose': False,
 }
+
+# The Python each Checkmk version runs. Plugins must parse with the Python
+# of the oldest Checkmk they support (version.min_required).
+CHECKMK_PYTHON = {
+    (2, 0): (3, 8),
+    (2, 1): (3, 9),
+    (2, 2): (3, 11),
+    (2, 3): (3, 12),
+    (2, 4): (3, 12),
+}
+
+
+def checkmk_python(min_required: str) -> Optional[tuple]:
+    """Python (major, minor) of a Checkmk version, None if not in the table"""
+    match = re.match(r'^(\d+)\.(\d+)', str(min_required))
+    if not match:
+        return None
+    return CHECKMK_PYTHON.get((int(match.group(1)), int(match.group(2))))
+
+
+def fstring_pre312_problem(source: str) -> Optional[tuple]:
+    """Find f-string syntax that needs Python 3.12 (PEP 701).
+
+    ast.parse(feature_version=...) does not check f-strings, because 3.12
+    reads them in the tokenizer. Before 3.12 an f-string was one string
+    literal, so its expressions could not contain its own quotes, a
+    backslash or a comment, and a single-quoted one could not span lines.
+    Returns (line, message) or None. Needs the 3.12 tokenizer.
+    """
+    fstring_start = getattr(tokenize, 'FSTRING_START', None)
+    if fstring_start is None:
+        return None
+    stack = []  # quote of each open f-string, innermost last
+    for tok in tokenize.generate_tokens(iter(source.splitlines(keepends=True)).__next__):
+        if tok.type == fstring_start:
+            if stack:
+                problem = _fstring_expression_problem(tok.string, stack)
+                if problem:
+                    return tok.start[0], problem
+            stack.append(tok.string.lstrip('rRfFbBuU'))
+        elif tok.type == tokenize.FSTRING_END:
+            stack.pop()
+        elif stack and tok.type == tokenize.NL:
+            # A line break in an expression; one in the literal text is
+            # part of FSTRING_MIDDLE.
+            if any(len(quote) == 1 for quote in stack):
+                return tok.start[0], 'single-quoted f-string expression spans several lines'
+        elif stack and tok.type != tokenize.FSTRING_MIDDLE:
+            if tok.type == tokenize.COMMENT:
+                return tok.start[0], 'comment inside an f-string expression'
+            problem = _fstring_expression_problem(tok.string, stack)
+            if problem:
+                return tok.start[0], problem
+    return None
+
+
+def _fstring_expression_problem(text: str, stack: list) -> Optional[str]:
+    if '\\' in text:
+        return 'backslash inside an f-string expression'
+    for quote in stack:
+        if quote in text:
+            return f'f-string expression reuses the enclosing quote {quote}'
+    return None
+
 
 # ANSI color codes
 class Colors:
@@ -188,6 +253,22 @@ class MKPBuilder:
             self.logger.warning("No Python files found to validate")
             return
         
+        min_required = self.config.get('version.min_required')
+        target = checkmk_python(min_required)
+        running = sys.version_info[:2]
+        if target is None:
+            self.logger.warning(f"No known Python for Checkmk {min_required}, "
+                                f"checking syntax with Python {running[0]}.{running[1]}")
+        elif target > running:
+            self.logger.warning(f"Checkmk {min_required} runs Python {target[0]}.{target[1]}, "
+                                f"but this is Python {running[0]}.{running[1]}: "
+                                f"valid newer syntax will be reported as an error")
+            target = None
+        else:
+            self.logger.info(f"Checking syntax for Python {target[0]}.{target[1]} "
+                             f"(Checkmk {min_required})")
+        pyver = f" for Python {target[0]}.{target[1]}" if target else ""
+
         errors = 0
         for py_file in python_files:
             self.logger.debug(f"Validating: {py_file}")
@@ -197,10 +278,14 @@ class MKPBuilder:
                     source = f.read()
                 
                 # Parse with AST to check syntax
-                ast.parse(source, filename=str(py_file))
+                ast.parse(source, filename=str(py_file), feature_version=target)
+                if target and target < (3, 12):
+                    problem = fstring_pre312_problem(source)
+                    if problem:
+                        raise SyntaxError(problem[1], (str(py_file), problem[0], 0, ''))
                 
             except SyntaxError as e:
-                self.logger.error(f"Python syntax error in {py_file}:{e.lineno}: {e.msg}")
+                self.logger.error(f"Python syntax error{pyver} in {py_file}:{e.lineno}: {e.msg}")
                 errors += 1
             except Exception as e:
                 self.logger.error(f"Error validating {py_file}: {e}")
