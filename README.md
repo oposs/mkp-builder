@@ -134,7 +134,7 @@ jobs:
 | `download-url` | Download URL | ❌ | From config file |
 | `version-usable-until` | The last Checkmk version this plugin is compatible with | ❌ | From config file |
 | `output-dir` | Output directory | ❌ | `.` |
-| `validate-python` | Validate Python files | ❌ | `true` |
+| `validate-python` | Validate Python files; `true` leaves it to `validate_python` in the config file | ❌ | `true` |
 | `verbose` | Enable verbose output | ❌ | `false` |
 
 ## Outputs
@@ -147,7 +147,9 @@ jobs:
 
 ## Configuration File
 
-Create a `.mkp-builder.ini` file in your repository root for default values:
+Create a `.mkp-builder.ini` file in your repository root for default values.
+An input of the action, or a flag of `mkp-builder.py`, overrides the value
+from the file:
 
 ```ini
 [package]
@@ -362,11 +364,11 @@ You can test the build script locally:
 
 ```bash
 # Download the script
-curl -sSL https://raw.githubusercontent.com/oposs/mkp-builder/main/mkp-builder.sh -o mkp-builder.sh
-chmod +x mkp-builder.sh
+curl -sSL https://raw.githubusercontent.com/oposs/mkp-builder/main/mkp-builder.py -o mkp-builder.py
+chmod +x mkp-builder.py
 
-# Run locally
-./mkp-builder.sh --version 1.0.0 --verbose
+# Run it in the plugin directory, the one that holds local/
+./mkp-builder.py --version 1.0.0 --verbose
 ```
 
 ## Version Pinning

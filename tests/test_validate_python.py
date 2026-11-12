@@ -80,9 +80,30 @@ def state(code: int) -> str:
 '''
 
 
-def build(source: str, min_required: str) -> subprocess.CompletedProcess:
+CHECK_PLUGIN = 'local/lib/python3/cmk_addons/plugins/demo/agent_based/demo.py'
+AGENT_PLUGIN = 'local/share/check_mk/agents/plugins/demo.py'
+
+# An agent plugin runs with the Python of the monitored host, which is
+# neither the Python of Checkmk nor necessarily older than it.
+AGENT_312 = '''\
+#!/usr/bin/env python3
+import json
+import subprocess
+
+devices = json.loads(subprocess.check_output(["lsblk", "--json"]))
+for dev in devices["blockdevices"]:
+    print(f"{dev["name"]}|{dev["size"]}")
+'''
+
+AGENT_BROKEN = '''\
+#!/usr/bin/env python3
+print "<<<demo>>>"
+'''
+
+
+def build(source: str, min_required: str, path: str = CHECK_PLUGIN) -> subprocess.CompletedProcess:
     with tempfile.TemporaryDirectory() as tmp:
-        plugin = Path(tmp, 'local/lib/python3/cmk_addons/plugins/demo/agent_based/demo.py')
+        plugin = Path(tmp, path)
         plugin.parent.mkdir(parents=True)
         plugin.write_text(source, encoding='utf-8')
         return subprocess.run(
@@ -137,6 +158,21 @@ class SyntaxFollowsMinRequired(unittest.TestCase):
                            PEP701_BACKSLASH, PEP701_MULTILINE, PEP701_COMMENT):
                 with self.subTest(min_required=min_required, source=source.splitlines()[0]):
                     self.assertAccepted(source, min_required)
+
+
+@unittest.skipIf(sys.version_info < (3, 12), 'needs Python 3.12, the Python of Checkmk 2.3')
+class AgentPluginsIgnoreMinRequired(unittest.TestCase):
+
+    def test_agent_plugin_not_held_to_checkmk_python(self):
+        result = build(AGENT_312, '2.2.0p1', AGENT_PLUGIN)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('All Python files validated successfully', result.stdout)
+
+    def test_agent_plugin_syntax_error_still_found(self):
+        result = build(AGENT_BROKEN, '2.3.0p1', AGENT_PLUGIN)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('agents/plugins/demo.py', result.stderr)
+        self.assertNotIn('for Python 3.12', result.stderr)
 
 
 if __name__ == '__main__':

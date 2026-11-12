@@ -35,7 +35,7 @@ inputs:
     required: false
     default: '.'
   validate-python:
-    description: 'Validate Python files before packaging (true/false)'
+    description: 'Validate Python files before packaging (true/false); with true, validate_python in the config file decides'
     required: false
     default: 'true'
   verbose:
@@ -153,11 +153,12 @@ runs:
         [[ -n "${{ inputs.version-usable-until }}" ]] && BUILD_ARGS+=("--version-usable-until" "${{ inputs.version-usable-until }}")
         [[ -n "${{ inputs.output-dir }}" ]] && BUILD_ARGS+=("--output-dir" "${{ inputs.output-dir }}")
         
-        # Add validation flag
+        # Add validation flag. A flag beats validate_python in
+        # .mkp-builder.ini, and 'true' is also the default of this input, so
+        # passing --validate for it would override an ini that turns the
+        # check off although the caller never asked for that.
         if [[ "${{ inputs.validate-python }}" == "false" ]]; then
           BUILD_ARGS+=("--no-validate")
-        else
-          BUILD_ARGS+=("--validate")
         fi
         
         # Add verbose flag
