@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2.2, although Checkmk 2.2 runs Python 3.11 and cannot load them. It now
   checks against the Python of `version-min-required` (3.11 for 2.2, 3.12 for
   2.3 and 2.4) and names that version in the error.
+- `validate-python` held Python agent plugins under
+  `local/share/check_mk/agents/` to the Python of `version-min-required`,
+  although they run with the Python of the monitored host. They are now only
+  checked for valid Python 3 syntax.
 - The `package-file` output could name an old `.mkp` from a subdirectory of
   `output-dir` instead of the package just built, so a release step could
   upload the wrong file. It now always names the built package, and

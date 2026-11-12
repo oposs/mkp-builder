@@ -270,19 +270,24 @@ class MKPBuilder:
         else:
             self.logger.info(f"Checking syntax for Python {target[0]}.{target[1]} "
                              f"(Checkmk {min_required})")
-        pyver = f" for Python {target[0]}.{target[1]}" if target else ""
+        # Agent plugins run on the monitored hosts with the Python found
+        # there, not with the Python of Checkmk, so they only get a plain
+        # parse with this interpreter.
+        agents_dir = local_dir / 'share' / 'check_mk' / 'agents'
 
         errors = 0
         for py_file in python_files:
             self.logger.debug(f"Validating: {py_file}")
-            
+            file_target = None if agents_dir in py_file.parents else target
+            pyver = f" for Python {file_target[0]}.{file_target[1]}" if file_target else ""
+
             try:
                 with open(py_file, 'r', encoding='utf-8') as f:
                     source = f.read()
                 
                 # Parse with AST to check syntax
-                ast.parse(source, filename=str(py_file), feature_version=target)
-                if target and target < (3, 12):
+                ast.parse(source, filename=str(py_file), feature_version=file_target)
+                if file_target and file_target < (3, 12):
                     problem = fstring_pre312_problem(source)
                     if problem:
                         raise SyntaxError(problem[1], (str(py_file), problem[0], 0, ''))
