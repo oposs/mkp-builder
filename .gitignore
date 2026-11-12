@@ -7,6 +7,7 @@
 !/.github
 !/.mkp-builder.ini.example
 !/.clinerules
+!/tests
 *~
 *.swp
 *.bak

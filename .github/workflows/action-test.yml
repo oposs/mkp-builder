@@ -9,6 +9,23 @@ permissions:
   contents: read
 
 jobs:
+  unit-tests:
+    name: Syntax check follows version.min_required
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # The same Python the action sets up. The tests need its tokenizer to
+      # see f-string syntax that older Checkmk versions cannot read.
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Run the unit tests
+        run: python3 -m unittest discover -s tests -v
+
   test-action:
     name: Test MKP Builder Action
     runs-on: ubuntu-latest

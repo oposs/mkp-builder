@@ -92,9 +92,10 @@ runs:
       if: ${{ inputs.validate-python == 'true' }}
       uses: actions/setup-python@v7
       with:
-        # The syntax check is ast.parse under this interpreter, so it must
-        # be the Python that Checkmk itself runs: 3.12 for 2.3 and 2.4.
-        # An older one rejects valid plugins that use 3.12 syntax.
+        # The syntax check narrows ast.parse down to the Python of
+        # version.min_required (3.11 for 2.2, 3.12 for 2.3 and 2.4), but it
+        # cannot accept syntax newer than this interpreter, so this must be
+        # the newest of them.
         python-version: '3.12'
 
     - name: Verify MKP build script
